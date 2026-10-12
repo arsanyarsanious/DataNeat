@@ -4,6 +4,8 @@ from .common import missing, numeric
 from .currency import normalize_currency, parse_currency
 from .date_analyzer import is_valid_date, parse_date
 from .percentage import normalize_percentage
+from .phone import normalize_phone
+from .symbols import normalize_symbols
 from .type_detector import BOOLEAN_MAP
 
 
@@ -156,6 +158,8 @@ def apply_cleaning_plan(df, approved_plan):
                 ),
                 "normalize_currency": lambda: normalize_currency(series, settings),
                 "normalize_percentage": lambda: normalize_percentage(series, settings),
+                "normalize_symbols": lambda: normalize_symbols(series, settings),
+                "normalize_phone": lambda: normalize_phone(series, settings),
             }
             if operation not in functions:
                 raise ValueError("Unknown operation")

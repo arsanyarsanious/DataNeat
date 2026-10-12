@@ -54,15 +54,18 @@ def generate_cleaning_plan(df, report=None):
                 {"strategy": "title"},
             )
         kind = c["detected_type"]
-        if issues.get("currency_inconsistency"):
+        if kind == "currency" or issues.get("currency_inconsistency"):
             add(
                 name,
                 "normalize_currency",
                 "currency_inconsistency",
-                issues["currency_inconsistency"],
+                c["total_rows"] - c["missing_count"],
                 "review",
                 "Choose the intended currency and output notation. Bare amounts and ambiguous symbols require explicit confirmation. Other currencies stay unchanged; no currency conversion is performed.",
                 {
+                    "action": "preserve",
+                    "symbol": "",
+                    "position": "prefix",
                     "currency": "",
                     "format": "code",
                     "assume_unlabelled": False,
@@ -79,10 +82,14 @@ def generate_cleaning_plan(df, report=None):
                 c["total_rows"] - c["missing_count"],
                 "review",
                 "Choose whether to include %. Confirm whether bare numbers are percentage points (10 = 10%) or fractional ratios (0.1 = 10%). Invalid values stay unchanged.",
-                {"format": "with_sign", "bare_interpretation": "preserve"},
+                {
+                    "action": "preserve",
+                    "format": "with_sign",
+                    "bare_interpretation": "preserve",
+                },
             )
         if (
-            kind in ("integer", "decimal", "currency")
+            kind in ("integer", "decimal")
             and not issues.get("currency_inconsistency")
             and not issues.get("percentage_inconsistency")
         ):
@@ -94,6 +101,26 @@ def generate_cleaning_plan(df, report=None):
                 "review",
                 "Normalize comma grouping and decimal formatting. Invalid values remain unchanged.",
                 {"kind": kind},
+            )
+        if kind == "number_with_symbol":
+            add(
+                name,
+                "normalize_symbols",
+                "symbol_inconsistency",
+                c["total_rows"] - c["missing_count"],
+                "review",
+                "Add a chosen symbol to all numeric values, remove all labels, or leave them unchanged. This changes notation only; units are not converted.",
+                {"action": "preserve", "symbol": "", "position": "suffix"},
+            )
+        if kind == "phone":
+            add(
+                name,
+                "normalize_phone",
+                "phone_inconsistency",
+                c["total_rows"] - c["missing_count"],
+                "review",
+                "Choose whether to include country codes and +, remove them, or leave numbers unchanged. Local numbers need an explicit country; invalid values stay unchanged.",
+                {"action": "preserve", "region": ""},
             )
         if kind == "boolean":
             add(

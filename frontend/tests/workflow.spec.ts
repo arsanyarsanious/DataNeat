@@ -181,8 +181,11 @@ test("invalid dates and currency issues are grouped by column and can be explici
   const money = page
     .getByRole("region", { name: "Cleaning actions for column Amount" })
     .locator(".operation")
-    .filter({ has: page.getByLabel("Currency for Amount", { exact: true }) });
+    .filter({
+      has: page.getByLabel("Symbol action for Amount", { exact: true }),
+    });
   await money.getByRole("checkbox").first().check();
+  await page.getByLabel("Symbol action for Amount").selectOption("legacy");
   await page
     .getByLabel("Currency for Amount", { exact: true })
     .selectOption("USD");
@@ -290,13 +293,11 @@ test("select all reflects partial selection, includes duplicates, and deselects 
   page,
 }) => {
   await page.goto("/");
-  await page
-    .getByLabel("Choose spreadsheet")
-    .setInputFiles({
-      name: "bulk.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from("City,Rate\n Cairo ,10%\ncairo,20\ncairo,20\n"),
-    });
+  await page.getByLabel("Choose spreadsheet").setInputFiles({
+    name: "bulk.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from("City,Rate\n Cairo ,10%\ncairo,20\ncairo,20\n"),
+  });
   await page.getByRole("button", { name: "Review cleaning plan" }).click();
   const all = page.getByLabel("Select all cleaning actions");
   await expect(all).toHaveJSProperty("indeterminate", true);
@@ -326,13 +327,11 @@ test("mixed percentage notation can include or omit sign without corrupting rati
   page,
 }) => {
   await page.goto("/");
-  await page
-    .getByLabel("Choose spreadsheet")
-    .setInputFiles({
-      name: "percent.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from("Rate\n10%\n0.2\n30%\n"),
-    });
+  await page.getByLabel("Choose spreadsheet").setInputFiles({
+    name: "percent.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from("Rate\n10%\n0.2\n30%\n"),
+  });
   await expect(
     page
       .getByRole("region", { name: "Analysis for column Rate" })
@@ -340,6 +339,7 @@ test("mixed percentage notation can include or omit sign without corrupting rati
   ).toBeVisible();
   await page.getByRole("button", { name: "Review cleaning plan" }).click();
   await page.getByLabel("Select all cleaning actions").check();
+  await page.getByLabel("Percentage action for Rate").selectOption("legacy");
   await page
     .getByLabel("Bare percentage interpretation for Rate")
     .selectOption("fraction");
@@ -370,5 +370,116 @@ test("mixed percentage notation can include or omit sign without corrupting rati
   expect(await fs.readFile((await result.path())!, "utf8")).toContain(
     "10\n20\n30",
   );
+  await page.getByRole("button", { name: "Delete file", exact: true }).click();
+});
+
+test("simple add, remove, and no-change choices cover percentages, symbols, and phone prefixes", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .getByLabel("Choose spreadsheet")
+    .setInputFiles({
+      name: "formats.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from(
+        "Rate,Amount,Phone,Weight\n10%,$100,+201001234567,10kg\n20,200 EUR,201001234567,20\n0.2,300,01001234567,30 kg\n",
+      ),
+    });
+  await expect(
+    page
+      .getByRole("region", { name: "Analysis for column Phone" })
+      .getByText("Mixed country codes and + notation", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Review cleaning plan" }).click();
+  await page.getByLabel("Select all cleaning actions").check();
+  // Only these formatting actions should be selected for an exact no-change comparison.
+  const whitespace = page
+    .locator(".operation")
+    .filter({ hasText: "Trim Whitespace" });
+  for (const op of await whitespace.all())
+    await op.locator(".operation-check input").uncheck();
+  await expect(page.getByLabel("Percentage action for Rate")).toHaveValue(
+    "preserve",
+  );
+  await expect(page.getByLabel("Symbol action for Amount")).toHaveValue(
+    "preserve",
+  );
+  await expect(page.getByLabel("Phone action for Phone")).toHaveValue(
+    "preserve",
+  );
+  await page.getByRole("button", { name: "Preview changes" }).click();
+  let after = page
+    .locator(".comparison .panel")
+    .filter({ has: page.getByRole("heading", { name: "After (preview)" }) });
+  await expect(
+    after.getByRole("cell", { name: "200 EUR", exact: true }),
+  ).toBeVisible();
+  await expect(
+    after.getByRole("cell", { name: "01001234567", exact: true }),
+  ).toBeVisible();
+  await page.getByLabel("Percentage action for Rate").selectOption("add");
+  await page.getByLabel("Symbol action for Amount").selectOption("add");
+  await page.getByLabel("Symbol for Amount").fill("$");
+  await page.getByLabel("Symbol position for Amount").selectOption("suffix");
+  await page.getByLabel("Symbol action for Weight").selectOption("add");
+  await page.getByLabel("Symbol for Weight").fill("kg");
+  await page.getByLabel("Phone action for Phone").selectOption("international");
+  await page
+    .getByLabel("Phone country for Phone", { exact: true })
+    .selectOption("EG");
+  await page.getByRole("button", { name: "Preview changes" }).click();
+  after = page
+    .locator(".comparison .panel")
+    .filter({ has: page.getByRole("heading", { name: "After (preview)" }) });
+  await expect(
+    after.getByRole("cell", { name: "20%", exact: true }),
+  ).toBeVisible();
+  await expect(
+    after.getByRole("cell", { name: "0.2%", exact: true }),
+  ).toBeVisible();
+  await expect(
+    after.getByRole("cell", { name: "200$", exact: true }),
+  ).toBeVisible();
+  await expect(
+    after.getByRole("cell", { name: "+201001234567", exact: true }),
+  ).toHaveCount(3);
+  await page.getByLabel("Percentage action for Rate").selectOption("remove");
+  await page.getByLabel("Symbol action for Amount").selectOption("remove");
+  await page.getByLabel("Symbol action for Weight").selectOption("remove");
+  await page.getByLabel("Phone action for Phone").selectOption("national");
+  await page.getByRole("button", { name: "Preview changes" }).click();
+  after = page
+    .locator(".comparison .panel")
+    .filter({ has: page.getByRole("heading", { name: "After (preview)" }) });
+  await expect(
+    after.getByRole("cell", { name: "01001234567", exact: true }),
+  ).toHaveCount(3);
+  await expect(
+    after.getByRole("cell", { name: "200", exact: true }),
+  ).toBeVisible();
+  await expect(
+    after.getByRole("cell", { name: "0.2", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Phone action for Phone")
+    .selectOption("international_digits");
+  await page.getByRole("button", { name: "Preview changes" }).click();
+  after = page
+    .locator(".comparison .panel")
+    .filter({ has: page.getByRole("heading", { name: "After (preview)" }) });
+  await expect(
+    after.getByRole("cell", { name: "201001234567", exact: true }),
+  ).toHaveCount(3);
+  await page.getByRole("button", { name: "Apply cleaning" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Cleaning complete", exact: true }),
+  ).toBeVisible();
+  const download = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Download CSV", exact: true }).click();
+  const result = await download;
+  const text = await fs.readFile((await result.path())!, "utf8");
+  expect(text).toContain("10,100,201001234567,10");
+  expect(text).toContain("20,200,201001234567,20");
   await page.getByRole("button", { name: "Delete file", exact: true }).click();
 });

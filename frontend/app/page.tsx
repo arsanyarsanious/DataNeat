@@ -31,6 +31,8 @@ import { InvalidDateControls } from "@/components/invalid-date-controls";
 import { CurrencyControls } from "@/components/currency-controls";
 import { PercentageControls } from "@/components/percentage-controls";
 import { PlanSelection } from "@/components/plan-selection";
+import { PhoneControls } from "@/components/phone-controls";
+import { SymbolControls } from "@/components/symbol-controls";
 import {
   api,
   initializeSession,
@@ -702,6 +704,24 @@ export default function Home() {
                                     }
                                   />
                                 )}
+                              {o.operation === "normalize_phone" && (
+                                <PhoneControls
+                                  operation={o}
+                                  disabled={busy}
+                                  onChange={(parameters) =>
+                                    update(o.id, { parameters })
+                                  }
+                                />
+                              )}
+                              {o.operation === "normalize_symbols" && (
+                                <SymbolControls
+                                  operation={o}
+                                  disabled={busy}
+                                  onChange={(parameters) =>
+                                    update(o.id, { parameters })
+                                  }
+                                />
+                              )}
                               {o.operation === "normalize_percentage" && (
                                 <PercentageControls
                                   operation={o}

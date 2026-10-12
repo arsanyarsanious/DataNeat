@@ -4,6 +4,8 @@ from collections import defaultdict
 from .common import missing
 from .currency import analyze_currency_column
 from .percentage import analyze_percentage_column, is_percentage_number
+from .phone import analyze_phone_column
+from .symbols import analyze_symbols
 from .type_detector import is_boolean, is_decimal, is_integer
 
 
@@ -90,6 +92,43 @@ def detect_percentage_inconsistency(series):
     }
 
 
+def detect_phone_issues(series):
+    analysis = analyze_phone_column(series)
+    result = []
+    if analysis["inconsistent"]:
+        result.append(
+            {
+                "issue": "phone_inconsistency",
+                "column": str(series.name),
+                "count": analysis["affected_rows"],
+                "formats": analysis["formats"],
+                "country_codes": analysis["country_codes"],
+                "examples": [str(v) for v in series if not missing(v)][:5],
+            }
+        )
+    if analysis["invalid_count"]:
+        result.append(
+            {
+                "issue": "invalid_phone",
+                "column": str(series.name),
+                "count": analysis["invalid_count"],
+                "examples": analysis["invalid_examples"],
+            }
+        )
+    return result
+
+
+def detect_symbol_inconsistency(series):
+    analysis = analyze_symbols(series)
+    return {
+        "issue": "symbol_inconsistency",
+        "column": str(series.name),
+        "count": analysis["affected_rows"] if analysis["inconsistent"] else 0,
+        "formats": analysis["formats"],
+        "examples": [str(v) for v in series if not missing(v)][:5],
+    }
+
+
 def detect_column_issues(series, detected_type):
     kind = (
         detected_type.get("type") if isinstance(detected_type, dict) else detected_type
@@ -101,12 +140,18 @@ def detect_column_issues(series, detected_type):
             detect_whitespace_issues(series),
             detect_case_inconsistency(series),
             detect_type_mismatches(series, detected_type),
+            *(detect_phone_issues(series) if kind == "phone" else []),
+            *(
+                [detect_symbol_inconsistency(series)]
+                if kind == "number_with_symbol"
+                else []
+            ),
             *(
                 [
                     detect_currency_inconsistency(series),
                     detect_percentage_inconsistency(series),
                 ]
-                if kind != "identifier"
+                if kind not in ("identifier", "phone")
                 else []
             ),
         ]

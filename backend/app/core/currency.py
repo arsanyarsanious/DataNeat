@@ -83,6 +83,13 @@ def analyze_currency_column(series):
 
 
 def normalize_currency(series, settings):
+    action = settings.get("action", "legacy")
+    if action in ("preserve", "add", "remove"):
+        from .symbols import normalize_symbols
+
+        return normalize_symbols(series, settings)
+    if action != "legacy":
+        raise ValueError("Choose add, remove, or no change")
     target = settings.get("currency", "")
     if target not in CURRENCY_CODES:
         raise ValueError("Choose a supported target currency")

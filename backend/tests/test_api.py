@@ -350,3 +350,85 @@ def test_percentage_api_formats_preserve_original_and_meaning(client):
         ).status_code
         == 422
     )
+
+
+def test_complete_column_symbol_and_phone_choices(client):
+    result = upload(
+        client,
+        b"Rate,Amount,Phone\n10%,$100,+201001234567\n20,200 EUR,201001234567\n0.2,300,01001234567\n",
+    )
+    fid = result["file_id"]
+    assert any(
+        i["issue"] == "phone_inconsistency"
+        for c in result["profile"]["columns"]
+        for i in c["issues"]
+    )
+
+    def op(name, column, parameters):
+        return {
+            "operation": name,
+            "column": column,
+            "enabled": True,
+            "parameters": parameters,
+        }
+
+    actions = [
+        op("normalize_percentage", "Rate", {"action": "add"}),
+        op(
+            "normalize_currency",
+            "Amount",
+            {"action": "add", "symbol": "$", "position": "suffix"},
+        ),
+        op("normalize_phone", "Phone", {"action": "international", "region": "EG"}),
+    ]
+    preview = client.post(
+        f"/api/files/{fid}/preview-cleaning", json={"operations": actions}
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["after"]["rows"] == [
+        ["10%", "100$", "+201001234567"],
+        ["20%", "200$", "+201001234567"],
+        ["0.2%", "300$", "+201001234567"],
+    ]
+    actions = [
+        op("normalize_percentage", "Rate", {"action": "remove"}),
+        op("normalize_currency", "Amount", {"action": "remove"}),
+        op("normalize_phone", "Phone", {"action": "national", "region": "EG"}),
+    ]
+    job = client.post(f"/api/files/{fid}/clean", json={"operations": actions}).json()[
+        "job_id"
+    ]
+    wait_job(client, job)
+    assert client.get(f"/api/jobs/{job}/results").json()["preview"]["rows"] == [
+        ["10", "100", "01001234567"],
+        ["20", "200", "01001234567"],
+        ["0.2", "300", "01001234567"],
+    ]
+    assert client.get(f"/api/files/{fid}/preview").json()["rows"][0] == [
+        "10%",
+        "$100",
+        "+201001234567",
+    ]
+    unchanged = [
+        op("normalize_percentage", "Rate", {"action": "preserve"}),
+        op("normalize_currency", "Amount", {"action": "preserve"}),
+        op("normalize_phone", "Phone", {"action": "preserve"}),
+    ]
+    assert (
+        client.post(
+            f"/api/files/{fid}/preview-cleaning", json={"operations": unchanged}
+        ).json()["after"]["rows"]
+        == result["preview"]["rows"]
+    )
+    for bad in [
+        op("normalize_phone", "Phone", {"action": "international"}),
+        op("normalize_phone", "Phone", {"action": "international", "region": "XX"}),
+        op("normalize_currency", "Amount", {"action": "add", "symbol": "bad symbol"}),
+        op("normalize_percentage", "Rate", {"action": "guess"}),
+    ]:
+        assert (
+            client.post(
+                f"/api/files/{fid}/preview-cleaning", json={"operations": [bad]}
+            ).status_code
+            == 422
+        )

@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from ..core.currency import CURRENCY_CODES
 from ..core.date_analyzer import is_valid_date
+from ..core.phone import REGIONS
 
 
 class Operation(BaseModel):
@@ -20,6 +21,8 @@ class Operation(BaseModel):
         "resolve_invalid_dates",
         "normalize_currency",
         "normalize_percentage",
+        "normalize_phone",
+        "normalize_symbols",
         "remove_duplicates",
         "rename_column",
     ]
@@ -82,6 +85,61 @@ class Operation(BaseModel):
                     raise ValueError(
                         "Enter a valid YYYY-MM-DD date or choose an empty cell"
                     )
+        if self.operation in (
+            "normalize_percentage",
+            "normalize_currency",
+            "normalize_symbols",
+        ):
+            if settings.get(
+                "action",
+                "legacy" if self.operation != "normalize_symbols" else "preserve",
+            ) not in (
+                ("preserve", "add", "remove")
+                if self.operation == "normalize_symbols"
+                else ("preserve", "add", "remove", "legacy")
+            ):
+                raise ValueError("Choose add to all, remove from all, or no change")
+        if (
+            self.operation in ("normalize_currency", "normalize_symbols")
+            and settings.get("action") == "add"
+            and self.enabled
+        ):
+            symbol = settings.get("symbol", "")
+            if (
+                not isinstance(symbol, str)
+                or not symbol.strip()
+                or len(symbol.strip()) > 12
+                or re.search(r"[\d\s\x00-\x1f]", symbol.strip())
+            ):
+                raise ValueError("Enter a short symbol without digits or spaces")
+        if self.operation in (
+            "normalize_currency",
+            "normalize_symbols",
+        ) and settings.get("position", "prefix") not in ("prefix", "suffix"):
+            raise ValueError("Choose prefix or suffix")
+        if self.operation == "normalize_phone":
+            if settings.get("action", "preserve") not in (
+                "preserve",
+                "international",
+                "international_digits",
+                "national",
+                "remove_plus",
+                "add_plus",
+            ):
+                raise ValueError("Choose a supported phone format")
+            region = settings.get("region", "")
+            if (
+                settings.get("action", "preserve") not in ("preserve", "remove_plus")
+                and region
+                and region not in REGIONS
+            ):
+                raise ValueError("Choose a supported phone country")
+            if (
+                self.enabled
+                and settings.get("action") in ("international", "international_digits")
+                and not region
+            ):
+                raise ValueError("Choose the country used for local phone numbers")
         if self.operation == "normalize_percentage":
             if settings.get("format", "with_sign") not in (
                 "with_sign",
@@ -99,7 +157,11 @@ class Operation(BaseModel):
                 raise ValueError(
                     "Confirm how bare percentage numbers should be interpreted"
                 )
-        if self.operation == "normalize_currency" and self.enabled:
+        if (
+            self.operation == "normalize_currency"
+            and self.enabled
+            and settings.get("action", "legacy") == "legacy"
+        ):
             if settings.get("currency") not in CURRENCY_CODES:
                 raise ValueError("Choose the intended currency")
             if settings.get("format", "code") not in ("code", "symbol", "number"):

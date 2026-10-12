@@ -60,13 +60,23 @@ Analysis now lists issues alphabetically under prominent column names; columns w
 
 Date-shaped values such as `88-99-2089` are recognized as invalid even when the column contains no valid dates. Under **Resolve Invalid Dates**, explicitly enable the operation, then choose either **Replace all invalid dates with empty cells** or **Correct individual rows manually**. Manual controls show the original invalid value and spreadsheet row number (including the header); enter a valid `YYYY-MM-DD` date or select that row's empty-cell checkbox. Paging does not discard your selected corrections. Unedited rows and valid/ambiguous dates are preserved by this operation.
 
-Mixed currency notation (`$100`, `200 USD`, `300`) is flagged with counts for each representation. Under **Normalize Currency**, choose the intended currency and output notation (code, supported symbol, or numbers only). Explicitly confirm whether bare numbers use that currency, and whether ambiguous symbols such as `$` or `¥` refer to it. Unconfirmed values and other currencies remain unchanged. For example, approving USD, bare amounts, and `$` produces `USD 100`, `USD 200`, and `USD 300`; `EUR 400` stays as `EUR 400`. There is no exchange-rate conversion. Supported ISO codes are listed in the currency selector; unsupported formats remain unchanged.
+Mixed currency notation (`$100`, `200 USD`, `300`) is flagged with counts for each representation. The simple add/remove/no-change choices are described below. For currency-aware handling, select **Advanced currency-aware formatting** under **Normalize Currency**, then choose the intended currency and output notation (code, supported symbol, or numbers only). Explicitly confirm whether bare numbers use that currency, and whether ambiguous symbols such as `$` or `¥` refer to it. Unconfirmed values and other currencies remain unchanged. For example, approving USD, bare amounts, and `$` produces `USD 100`, `USD 200`, and `USD 300`; `EUR 400` stays as `EUR 400`. There is no exchange-rate conversion. Supported ISO codes are listed in the currency selector; unsupported formats remain unchanged.
 
 ### Bulk selection and percentage consistency
 
 The review step includes **Select all** and **Deselect all**, with a partial-selection indicator when only some actions are enabled. Selecting all includes row-removal suggestions; the notice identifies them, and operations still run only when you click Apply Cleaning. Existing operation settings are retained, and currency/percentage interpretations remain your choice.
 
 Percentage columns containing both `10%` and bare values are flagged as **Mixed percentage notation**, with counts for each representation. **Normalize Percentage** offers three outputs: include the sign (`10%`), omit it as percentage points (`10`), or omit it as a fractional ratio (`0.1`). Choose how to interpret bare numbers: percentage points (`10` means `10%`), fractional ratios (`0.1` means `10%`), or preserve them unchanged. For example, `10%`, `0.2`, and `30%` become `10%`, `20%`, `30%` when bare values are confirmed as fractional ratios; selecting percentage-point output produces `10`, `20`, `30`. No scale is inferred from value ranges. Missing and invalid values remain unchanged, and the original upload is preserved. Ratios here mean decimal fractions, rather than `1:2` or `1/2` notation.
+
+### Simple notation choices and phone numbers
+
+Percentage, currency, and numeric-unit controls now offer **No change**, **Add to all numbers**, and **Remove from all numbers**. These simple choices preserve the numeric text and scale: `10%`, `20`, `0.2` become `10%`, `20%`, `0.2%` when adding, or `10`, `20`, `0.2` when removing. They do not multiply/divide values. Currency/unit symbols can be placed before or after every recognized numeric value, including bare numbers. Removing strips all labels, including different currencies; adding replaces them with your chosen label. This discards unit/currency information and does not perform conversion, so review the preview. No change preserves the original value exactly. Missing and unsupported values remain unchanged. The earlier currency-aware and percentage-rescaling controls remain available under the advanced options.
+
+Phone columns are recognized from names such as Phone, Mobile, Telephone, and Phone Number, or strong international-number evidence. Analysis flags mixed `+`, `00`, bare country-code, and local formats, and reports recognizable country codes and unsupported phone values. Different countries alone are not treated as a formatting error.
+
+**Normalize Phone** offers: no change; add country codes with `+`; add country codes without `+`; remove country codes and return local numbers; remove `+` only; or add `+` to recognized international numbers. Select the country for local/unprefixed numbers (use a two-letter ISO code for countries outside the dropdown). For Egypt, `+201001234567`, `201001234567`, `00201001234567`, and `01001234567` can all become `+201001234567`, `201001234567`, or local `01001234567` according to your choice. Existing explicit foreign country codes are not overwritten. Local dialing prefixes, including meaningful Italian leading zeros, are handled by offline `phonenumbers` metadata rather than arithmetic or blind prefix removal. Invalid, unresolved, or unsupported extension formats are preserved. This checks formatting/plausibility, not ownership or reachability. There is no external phone lookup.
+
+Exports retain formula-injection protection; CSV/XLSX string values beginning with `+` can carry the text-escape apostrophe. The phone parser recognizes a formula-safe `'+...` value on reimport while leaving it intact in no-change mode. Use the preview and report to review formatting changes before downloading.
 
 ### Preservation rules
 
@@ -87,6 +97,10 @@ backend/
     main.py                    FastAPI endpoints and background-job orchestration
     core/
       common.py                Missing markers, scalar serialization, decimal parsing
+      symbols.py               Literal numeric prefix/suffix labels
+      phone.py                 Offline country-code and phone formatting
+      percentage.py            Percentage notation and optional explicit scaling
+      currency.py              Currency notation and optional currency-aware handling
       profiler.py              Read-only column and dataset profiling
       type_detector.py         Context-aware heuristic semantic types
       issue_detector.py        Missing, whitespace, case, type, duplicate detection
@@ -137,7 +151,7 @@ React, TypeScript, Tailwind CSS, Lucide, shadcn/ui component conventions, and Ta
 | GET | `/api/jobs/{job_id}/download` | `format=csv`, `xlsx`, or `report` |
 | DELETE | `/api/files/{file_id}` | Delete stored upload and all associated jobs |
 
-Operations require `enabled: true` to execute. Supported names: `trim_whitespace`, `normalize_missing_values`, `normalize_capitalization`, `normalize_numeric`, `normalize_boolean`, `normalize_dates`, `resolve_invalid_dates`, `normalize_currency`, `normalize_percentage`, `remove_duplicates`, `rename_column`. See OpenAPI and the generated cleaning plan for schema and parameters. API scripts must retain the `dataneat_session` cookie; identifiers alone never authorize access.
+Operations require `enabled: true` to execute. Supported names: `trim_whitespace`, `normalize_missing_values`, `normalize_capitalization`, `normalize_numeric`, `normalize_boolean`, `normalize_dates`, `resolve_invalid_dates`, `normalize_currency`, `normalize_percentage`, `normalize_symbols`, `normalize_phone`, `remove_duplicates`, `rename_column`. See OpenAPI and the generated cleaning plan for schema and parameters. API scripts must retain the `dataneat_session` cookie; identifiers alone never authorize access.
 
 ## Environment variables
 
