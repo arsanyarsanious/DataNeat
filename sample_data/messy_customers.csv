@@ -1,0 +1,7 @@
+Customer_ID,City,Salary,Birth_Date,Active,Discount,Cost,Notes
+001, Cairo ,"5,000",15/05/2025,Yes,10%,$20.00,normal
+002,cairo,6200,05/10/2025,TRUE,12%,$25,normal
+003,CAIRO,Unknown,2025-99-88,1,N/A,$30,=SUM(A1:A2)
+004, Giza,7200,Oct 5 2025,No,5%,$15,normal
+005,Alexandria ,"8,200",2025-10-05,Y,10%,$50,normal
+005,Alexandria ,"8,200",2025-10-05,Y,10%,$50,normal

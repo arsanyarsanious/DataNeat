@@ -1,0 +1,31 @@
+.venv/
+__pycache__/
+.pytest_cache/
+storage/
+.env
+node_modules/
+.next/
+test-results/
+playwright-report/
+*.tsbuildinfo
+
+# Additional local environments, caches, and temporary uploads
+venv/
+env/
+.ruff_cache/
+.cache/
+.npm/
+uploads/
+tmp/
+*.log
+
+# Local secrets and credentials; retain the documented example
+.env.*
+!.env.example
+secrets/
+.secrets/
+*.key
+*.pem
+*.p12
+*.pfx
+credentials*.json
