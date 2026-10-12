@@ -308,3 +308,45 @@ def test_invalid_date_rows_are_paginated_isolated_and_correctable(client):
             ).status_code
             == 422
         )
+
+
+def test_percentage_api_formats_preserve_original_and_meaning(client):
+    result = upload(client, b"Rate\n10%\n0.2\n30%\n")
+    fid = result["file_id"]
+    assert result["profile"]["columns"][0]["detected_type"] == "percentage"
+    op = next(o for o in result["plan"] if o["operation"] == "normalize_percentage")
+    op.update(
+        enabled=True,
+        parameters={"format": "with_sign", "bare_interpretation": "fraction"},
+    )
+    preview = client.post(
+        f"/api/files/{fid}/preview-cleaning", json={"operations": [op]}
+    ).json()
+    assert preview["after"]["rows"] == [["10%"], ["20%"], ["30%"]]
+    assert not any(
+        i["issue"] == "percentage_inconsistency"
+        for i in preview["validation"]["remaining_issues"]
+    )
+    op["parameters"]["format"] = "without_sign"
+    job = client.post(f"/api/files/{fid}/clean", json={"operations": [op]}).json()[
+        "job_id"
+    ]
+    wait_job(client, job)
+    assert client.get(f"/api/jobs/{job}/results").json()["preview"]["rows"] == [
+        ["10"],
+        ["20"],
+        ["30"],
+    ]
+    assert "10\n20\n30" in client.get(f"/api/jobs/{job}/download").text
+    assert client.get(f"/api/files/{fid}/preview").json()["rows"] == [
+        ["10%"],
+        ["0.2"],
+        ["30%"],
+    ]
+    op["parameters"]["bare_interpretation"] = "guess"
+    assert (
+        client.post(
+            f"/api/files/{fid}/preview-cleaning", json={"operations": [op]}
+        ).status_code
+        == 422
+    )

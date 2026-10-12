@@ -29,6 +29,8 @@ import { DataTable } from "@/components/data-table";
 import { ColumnAnalysis } from "@/components/column-analysis";
 import { InvalidDateControls } from "@/components/invalid-date-controls";
 import { CurrencyControls } from "@/components/currency-controls";
+import { PercentageControls } from "@/components/percentage-controls";
+import { PlanSelection } from "@/components/plan-selection";
 import {
   api,
   initializeSession,
@@ -623,6 +625,16 @@ export default function Home() {
                     Your original file is preserved. Invalid and ambiguous
                     values remain unchanged unless explicitly resolved.
                   </div>
+                  <PlanSelection
+                    operations={operations}
+                    disabled={busy}
+                    onSelect={(enabled) => {
+                      setOperations((items) =>
+                        items.map((o) => ({ ...o, enabled })),
+                      );
+                      setComparison(null);
+                    }}
+                  />
                   <div className="column-operation-groups">
                     {operationGroups.map((group) => (
                       <section
@@ -690,6 +702,15 @@ export default function Home() {
                                     }
                                   />
                                 )}
+                              {o.operation === "normalize_percentage" && (
+                                <PercentageControls
+                                  operation={o}
+                                  disabled={busy}
+                                  onChange={(parameters) =>
+                                    update(o.id, { parameters })
+                                  }
+                                />
+                              )}
                               {o.operation === "normalize_currency" && (
                                 <CurrencyControls
                                   operation={o}

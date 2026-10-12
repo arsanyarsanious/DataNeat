@@ -3,6 +3,7 @@ import re
 from .common import missing, numeric
 from .currency import currency_marker, parse_currency
 from .date_analyzer import detect_date_pattern, is_valid_date
+from .percentage import parse_percentage
 
 BOOLEAN_MAP = {
     "true": True,
@@ -76,6 +77,25 @@ def detect_column_type(series, threshold=0.8):
             re.search("salary|amount|price|cost", name) and amount_score >= 0.5
         ):
             return {"type": "currency", "match_score": round(amount_score, 4)}
+    percent_values = []
+    for value in values:
+        try:
+            percent_values.append(parse_percentage(value)[1])
+        except ValueError:
+            pass
+    percent_score = len(percent_values) / len(values)
+    percent_name = re.sub(r"([a-z])([A-Z])", r"\1_\2", str(series.name or "")).lower()
+    percent_context = bool(
+        re.search(
+            r"(^|[_\s])(percent(?:age)?|ratio|discount|rate)($|[_\s])", percent_name
+        )
+    )
+    if (
+        percent_values
+        and (any(percent_values) or percent_context)
+        and (percent_score >= threshold or (percent_context and percent_score >= 0.5))
+    ):
+        return {"type": "percentage", "match_score": round(percent_score, 4)}
     checks = []
     if any(
         s.lower() in {"yes", "no", "true", "false", "y", "n"} for s in strings

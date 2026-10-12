@@ -3,6 +3,7 @@ from collections import defaultdict
 
 from .common import missing
 from .currency import analyze_currency_column
+from .percentage import analyze_percentage_column, is_percentage_number
 from .type_detector import is_boolean, is_decimal, is_integer
 
 
@@ -55,7 +56,7 @@ def detect_type_mismatches(series, detected_type):
         "integer": is_integer,
         "decimal": is_decimal,
         "currency": is_decimal,
-        "percentage": is_decimal,
+        "percentage": is_percentage_number,
     }.get(kind)
     return issue(
         series,
@@ -76,6 +77,19 @@ def detect_currency_inconsistency(series):
     }
 
 
+def detect_percentage_inconsistency(series):
+    analysis = analyze_percentage_column(series)
+    return {
+        "issue": "percentage_inconsistency",
+        "column": str(series.name),
+        "count": analysis["affected_rows"] if analysis["inconsistent"] else 0,
+        "formats": analysis["formats"],
+        "examples": [
+            str(v) for v in series if not missing(v) and is_percentage_number(v)
+        ][:5],
+    }
+
+
 def detect_column_issues(series, detected_type):
     kind = (
         detected_type.get("type") if isinstance(detected_type, dict) else detected_type
@@ -87,7 +101,14 @@ def detect_column_issues(series, detected_type):
             detect_whitespace_issues(series),
             detect_case_inconsistency(series),
             detect_type_mismatches(series, detected_type),
-            *([detect_currency_inconsistency(series)] if kind != "identifier" else []),
+            *(
+                [
+                    detect_currency_inconsistency(series),
+                    detect_percentage_inconsistency(series),
+                ]
+                if kind != "identifier"
+                else []
+            ),
         ]
         if v["count"]
     ]

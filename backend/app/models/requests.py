@@ -19,6 +19,7 @@ class Operation(BaseModel):
         "normalize_dates",
         "resolve_invalid_dates",
         "normalize_currency",
+        "normalize_percentage",
         "remove_duplicates",
         "rename_column",
     ]
@@ -81,6 +82,23 @@ class Operation(BaseModel):
                     raise ValueError(
                         "Enter a valid YYYY-MM-DD date or choose an empty cell"
                     )
+        if self.operation == "normalize_percentage":
+            if settings.get("format", "with_sign") not in (
+                "with_sign",
+                "without_sign",
+                "ratio",
+            ):
+                raise ValueError(
+                    "Choose percentage sign, percentage points, or fractional ratio output"
+                )
+            if settings.get("bare_interpretation", "preserve") not in (
+                "preserve",
+                "percentage_points",
+                "fraction",
+            ):
+                raise ValueError(
+                    "Confirm how bare percentage numbers should be interpreted"
+                )
         if self.operation == "normalize_currency" and self.enabled:
             if settings.get("currency") not in CURRENCY_CODES:
                 raise ValueError("Choose the intended currency")
