@@ -4,6 +4,7 @@ const names: Record<string, string> = {
   invalid_dates: "Invalid dates",
   ambiguous_dates: "Dates with two possible meanings",
   currency_inconsistency: "Mixed currency notation",
+  percentage_inconsistency: "Mixed percentage notation",
   missing_values: "Missing values",
   extra_whitespace: "Extra whitespace",
   case_inconsistency: "Inconsistent capitalization",
@@ -73,6 +74,24 @@ export function ColumnAnalysis({
                 These dates could mean day/month or month/day. They stay
                 unchanged until you confirm an interpretation.
               </p>
+            )}
+            {issue.issue === "percentage_inconsistency" && (
+              <>
+                <p>
+                  Some values include % and others do not. Choose a consistent
+                  output and confirm whether bare numbers are percentage points
+                  or fractional ratios.
+                </p>
+                <div className="format-chips">
+                  {Object.entries(issue.formats || {}).map(
+                    ([format, count]) => (
+                      <span key={format}>
+                        {format}: {count} rows
+                      </span>
+                    ),
+                  )}
+                </div>
+              </>
             )}
             {issue.issue === "currency_inconsistency" && (
               <>

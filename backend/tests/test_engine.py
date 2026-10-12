@@ -334,3 +334,80 @@ def test_currency_standardization_requires_explicit_assumptions_and_preserves_ot
     assert report["detected_type"] == "identifier" and not any(
         i["issue"] == "currency_inconsistency" for i in report["issues"]
     )
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        ["10%", "20", "30%"],
+        ["10", "20", "30%"],
+        ["10 %", "0.2", "bad"],
+        [".1", "20%", ".3"],
+    ],
+)
+def test_percentage_notation_inconsistency_is_detected(values):
+    report = profile_column(pd.Series(values, name="Discount"))
+    issue = next(
+        i for i in report["issues"] if i["issue"] == "percentage_inconsistency"
+    )
+    assert issue["formats"]["with %"] and issue["formats"]["without %"]
+    plan = generate_cleaning_plan(pd.DataFrame({"Discount": values}))
+    op = next(o for o in plan if o["operation"] == "normalize_percentage")
+    assert not op["enabled"] and op["parameters"]["bare_interpretation"] == "preserve"
+    assert not any(o["operation"] == "normalize_numeric" for o in plan)
+
+
+def test_percentage_scaling_and_preservation():
+    from app.core.percentage import normalize_percentage
+
+    values = pd.Series(["10%", "0.2", "30%", "invalid", None, "$40"])
+    original = values.copy(deep=True)
+    assert normalize_percentage(
+        values, {"format": "with_sign", "bare_interpretation": "fraction"}
+    ).tolist() == ["10%", "20%", "30%", "invalid", None, "$40"]
+    assert normalize_percentage(
+        values, {"format": "without_sign", "bare_interpretation": "fraction"}
+    ).tolist() == ["10", "20", "30", "invalid", None, "$40"]
+    assert normalize_percentage(
+        values, {"format": "ratio", "bare_interpretation": "fraction"}
+    ).tolist() == ["0.1", "0.2", "0.3", "invalid", None, "$40"]
+    assert normalize_percentage(
+        values, {"format": "without_sign", "bare_interpretation": "preserve"}
+    ).tolist() == ["10", "0.2", "30", "invalid", None, "$40"]
+    assert normalize_percentage(
+        pd.Series(["10%", "20"]),
+        {"format": "with_sign", "bare_interpretation": "percentage_points"},
+    ).tolist() == ["10%", "20%"]
+    assert normalize_percentage(
+        pd.Series(["10 %", ".2"]),
+        {"format": "ratio", "bare_interpretation": "fraction"},
+    ).tolist() == ["0.1", "0.2"]
+    assert (
+        normalize_percentage(
+            pd.Series(["0.123456789012345678901234567890123"]),
+            {"format": "with_sign", "bare_interpretation": "fraction"},
+        )[0]
+        == "12.3456789012345678901234567890123%"
+    )
+    with pytest.raises(ValueError):
+        normalize_percentage(values, {"format": "guess"})
+    pd.testing.assert_series_equal(values, original)
+
+
+def test_ratio_type_context_is_conservative():
+    assert (
+        detect_column_type(pd.Series(["0.1", "0.2"], name="Ratio"))["type"]
+        == "percentage"
+    )
+    assert (
+        detect_column_type(pd.Series(["0.1", "0.2"], name="ConversionRate"))["type"]
+        == "percentage"
+    )
+    assert (
+        detect_column_type(pd.Series(["0.1", "0.2"], name="Corporate"))["type"]
+        == "decimal"
+    )
+    assert not any(
+        i["issue"] == "percentage_inconsistency"
+        for i in profile_column(pd.Series(["001", "2%"], name="ID"))["issues"]
+    )

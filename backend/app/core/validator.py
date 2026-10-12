@@ -15,7 +15,7 @@ def validate_cleaning(original, cleaned, logs):
         "duplicates_removed": len(original) - len(cleaned),
         "dates_standardized": modified(["normalize_dates"]),
         "numeric_values_standardized": modified(
-            ["normalize_numeric", "normalize_currency"]
+            ["normalize_numeric", "normalize_currency", "normalize_percentage"]
         ),
         "invalid_dates_resolved": modified(["resolve_invalid_dates"]),
         "text_values_modified": modified(

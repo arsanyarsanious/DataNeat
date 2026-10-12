@@ -285,3 +285,90 @@ test("impossible dates can be cleared without changing valid or ambiguous dates"
   ).toBeVisible();
   await page.getByRole("button", { name: "Delete file", exact: true }).click();
 });
+
+test("select all reflects partial selection, includes duplicates, and deselects all", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .getByLabel("Choose spreadsheet")
+    .setInputFiles({
+      name: "bulk.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from("City,Rate\n Cairo ,10%\ncairo,20\ncairo,20\n"),
+    });
+  await page.getByRole("button", { name: "Review cleaning plan" }).click();
+  const all = page.getByLabel("Select all cleaning actions");
+  await expect(all).toHaveJSProperty("indeterminate", true);
+  await all.check();
+  const operations = page.locator(
+    ".operation > .operation-check input[type=checkbox]",
+  );
+  for (const checkbox of await operations.all())
+    await expect(checkbox).toBeChecked();
+  await expect(page.locator(".plan-selection")).toContainText(
+    "including 1 action that removes rows",
+  );
+  await operations.first().uncheck();
+  await expect(all).not.toBeChecked();
+  await expect(all).toHaveJSProperty("indeterminate", true);
+  await all.check();
+  await expect(all).toHaveJSProperty("indeterminate", false);
+  await page.getByRole("button", { name: "Deselect all", exact: true }).click();
+  for (const checkbox of await operations.all())
+    await expect(checkbox).not.toBeChecked();
+  await expect(all).not.toBeChecked();
+  await expect(all).toHaveJSProperty("indeterminate", false);
+  await page.getByRole("button", { name: "Delete file", exact: true }).click();
+});
+
+test("mixed percentage notation can include or omit sign without corrupting ratios", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .getByLabel("Choose spreadsheet")
+    .setInputFiles({
+      name: "percent.csv",
+      mimeType: "text/csv",
+      buffer: Buffer.from("Rate\n10%\n0.2\n30%\n"),
+    });
+  await expect(
+    page
+      .getByRole("region", { name: "Analysis for column Rate" })
+      .getByText("Mixed percentage notation", { exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Review cleaning plan" }).click();
+  await page.getByLabel("Select all cleaning actions").check();
+  await page
+    .getByLabel("Bare percentage interpretation for Rate")
+    .selectOption("fraction");
+  await page.getByRole("button", { name: "Preview changes" }).click();
+  let after = page
+    .locator(".comparison .panel")
+    .filter({ has: page.getByRole("heading", { name: "After (preview)" }) });
+  await expect(
+    after.getByRole("cell", { name: "20%", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByLabel("Percentage format for Rate")
+    .selectOption("without_sign");
+  await page.getByRole("button", { name: "Preview changes" }).click();
+  after = page
+    .locator(".comparison .panel")
+    .filter({ has: page.getByRole("heading", { name: "After (preview)" }) });
+  await expect(
+    after.getByRole("cell", { name: "20", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Apply cleaning" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Cleaning complete", exact: true }),
+  ).toBeVisible();
+  const download = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Download CSV", exact: true }).click();
+  const result = await download;
+  expect(await fs.readFile((await result.path())!, "utf8")).toContain(
+    "10\n20\n30",
+  );
+  await page.getByRole("button", { name: "Delete file", exact: true }).click();
+});

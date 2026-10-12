@@ -69,8 +69,22 @@ def generate_cleaning_plan(df, report=None):
                     "symbol_aliases": [],
                 },
             )
-        if kind in ("integer", "decimal", "currency", "percentage") and not issues.get(
-            "currency_inconsistency"
+        if kind == "percentage" or issues.get("percentage_inconsistency"):
+            add(
+                name,
+                "normalize_percentage",
+                "percentage_inconsistency"
+                if issues.get("percentage_inconsistency")
+                else "percentage_formatting",
+                c["total_rows"] - c["missing_count"],
+                "review",
+                "Choose whether to include %. Confirm whether bare numbers are percentage points (10 = 10%) or fractional ratios (0.1 = 10%). Invalid values stay unchanged.",
+                {"format": "with_sign", "bare_interpretation": "preserve"},
+            )
+        if (
+            kind in ("integer", "decimal", "currency")
+            and not issues.get("currency_inconsistency")
+            and not issues.get("percentage_inconsistency")
         ):
             add(
                 name,

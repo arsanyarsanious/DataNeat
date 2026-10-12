@@ -62,13 +62,19 @@ Date-shaped values such as `88-99-2089` are recognized as invalid even when the 
 
 Mixed currency notation (`$100`, `200 USD`, `300`) is flagged with counts for each representation. Under **Normalize Currency**, choose the intended currency and output notation (code, supported symbol, or numbers only). Explicitly confirm whether bare numbers use that currency, and whether ambiguous symbols such as `$` or `¥` refer to it. Unconfirmed values and other currencies remain unchanged. For example, approving USD, bare amounts, and `$` produces `USD 100`, `USD 200`, and `USD 300`; `EUR 400` stays as `EUR 400`. There is no exchange-rate conversion. Supported ISO codes are listed in the currency selector; unsupported formats remain unchanged.
 
+### Bulk selection and percentage consistency
+
+The review step includes **Select all** and **Deselect all**, with a partial-selection indicator when only some actions are enabled. Selecting all includes row-removal suggestions; the notice identifies them, and operations still run only when you click Apply Cleaning. Existing operation settings are retained, and currency/percentage interpretations remain your choice.
+
+Percentage columns containing both `10%` and bare values are flagged as **Mixed percentage notation**, with counts for each representation. **Normalize Percentage** offers three outputs: include the sign (`10%`), omit it as percentage points (`10`), or omit it as a fractional ratio (`0.1`). Choose how to interpret bare numbers: percentage points (`10` means `10%`), fractional ratios (`0.1` means `10%`), or preserve them unchanged. For example, `10%`, `0.2`, and `30%` become `10%`, `20%`, `30%` when bare values are confirmed as fractional ratios; selecting percentage-point output produces `10`, `20`, `30`. No scale is inferred from value ranges. Missing and invalid values remain unchanged, and the original upload is preserved. Ratios here mean decimal fractions, rather than `1:2` or `1/2` notation.
+
 ### Preservation rules
 
 - CSV values are read without pandas type coercion, including leading zeros, whitespace, and literal missing markers. Encoding and delimiter are detected.
 - Excel uses read-only openpyxl parsing. String identifiers and simple numeric zero-padding formats (e.g. `000`) preserve leading zeros. Native Excel dates retain their date/time values.
 - Duplicate or empty headers receive unique names and the UI reports the adjustments.
 - Type match scores are the fraction of observed values matching a rule, **not calibrated probabilities**. Identifier names and leading zeros take precedence over numeric inference.
-- Numeric cleaning uses decimal arithmetic, preserving large integers and decimal precision. Unsupported decimal/grouping conventions stay unchanged. Currency symbols are retained; currencies are never converted or merged. Percentage labels remain percentages.
+- Numeric cleaning uses decimal arithmetic, preserving large integers and decimal precision. Unsupported decimal/grouping conventions stay unchanged. Currency symbols are retained; currencies are never converted or merged. Percentage normalization can retain the sign, emit bare percentage points, or emit fractional ratios after user review.
 - Both valid interpretations of `05/10/2025` are recognized. Nonambiguous dates contribute evidence; conflicting evidence is reported. **Ambiguous values remain unchanged unless the user explicitly selects day-first or month-first.** Evidence alone never changes them.
 - Invalid values remain available for review. Missing values are not filled or invented. Executed operations do not imply that the data is completely clean.
 - Exported string cells and headers beginning with formula-control characters (including after leading whitespace) are prefixed with an apostrophe. This deliberately changes their exported representation for spreadsheet safety. Original stored data is unchanged.
@@ -131,7 +137,7 @@ React, TypeScript, Tailwind CSS, Lucide, shadcn/ui component conventions, and Ta
 | GET | `/api/jobs/{job_id}/download` | `format=csv`, `xlsx`, or `report` |
 | DELETE | `/api/files/{file_id}` | Delete stored upload and all associated jobs |
 
-Operations require `enabled: true` to execute. Supported names: `trim_whitespace`, `normalize_missing_values`, `normalize_capitalization`, `normalize_numeric`, `normalize_boolean`, `normalize_dates`, `resolve_invalid_dates`, `normalize_currency`, `remove_duplicates`, `rename_column`. See OpenAPI and the generated cleaning plan for schema and parameters. API scripts must retain the `dataneat_session` cookie; identifiers alone never authorize access.
+Operations require `enabled: true` to execute. Supported names: `trim_whitespace`, `normalize_missing_values`, `normalize_capitalization`, `normalize_numeric`, `normalize_boolean`, `normalize_dates`, `resolve_invalid_dates`, `normalize_currency`, `normalize_percentage`, `remove_duplicates`, `rename_column`. See OpenAPI and the generated cleaning plan for schema and parameters. API scripts must retain the `dataneat_session` cookie; identifiers alone never authorize access.
 
 ## Environment variables
 
