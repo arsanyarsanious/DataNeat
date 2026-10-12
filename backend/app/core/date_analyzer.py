@@ -24,22 +24,14 @@ def detect_date_pattern(value):
             if int(b) > 12:
                 return f"MM{sep}DD{sep}YYYY"
             return f"DD{sep}MM{sep}YYYY_or_MM{sep}DD{sep}YYYY"
-    if any(
-        re.search(rf"\b{m}", s, re.I)
-        for m in [
-            "Jan",
-            "Feb",
-            "Mar",
-            "Apr",
-            "May",
-            "Jun",
-            "Jul",
-            "Aug",
-            "Sep",
-            "Oct",
-            "Nov",
-            "Dec",
-        ]
+    if (
+        re.search(
+            r"\b(?:Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:tember)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\b",
+            s,
+            re.IGNORECASE,
+        )
+        and re.search(r"\b\d{1,2}\b", s)
+        and re.search(r"\b\d{4}\b", s)
     ):
         return "Month-name formats"
     return None

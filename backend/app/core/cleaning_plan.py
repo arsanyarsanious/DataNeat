@@ -54,7 +54,24 @@ def generate_cleaning_plan(df, report=None):
                 {"strategy": "title"},
             )
         kind = c["detected_type"]
-        if kind in ("integer", "decimal", "currency", "percentage"):
+        if issues.get("currency_inconsistency"):
+            add(
+                name,
+                "normalize_currency",
+                "currency_inconsistency",
+                issues["currency_inconsistency"],
+                "review",
+                "Choose the intended currency and output notation. Bare amounts and ambiguous symbols require explicit confirmation. Other currencies stay unchanged; no currency conversion is performed.",
+                {
+                    "currency": "",
+                    "format": "code",
+                    "assume_unlabelled": False,
+                    "symbol_aliases": [],
+                },
+            )
+        if kind in ("integer", "decimal", "currency", "percentage") and not issues.get(
+            "currency_inconsistency"
+        ):
             add(
                 name,
                 "normalize_numeric",
@@ -72,6 +89,16 @@ def generate_cleaning_plan(df, report=None):
                 c["total_rows"] - c["missing_count"],
                 "review",
                 "Convert recognized boolean labels to true/false; preserve invalid values.",
+            )
+        if issues.get("invalid_dates"):
+            add(
+                name,
+                "resolve_invalid_dates",
+                "invalid_dates",
+                issues["invalid_dates"],
+                "review",
+                "Replace invalid dates with empty cells or correct individual rows. Valid and ambiguous dates are left untouched by this operation.",
+                {"action": "manual", "replacements": {}},
             )
         if kind in ("date", "datetime"):
             add(

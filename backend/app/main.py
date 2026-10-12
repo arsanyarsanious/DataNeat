@@ -16,7 +16,8 @@ from starlette.concurrency import run_in_threadpool
 
 from .core.cleaner import apply_cleaning_plan
 from .core.cleaning_plan import generate_cleaning_plan
-from .core.common import scalar
+from .core.common import missing, scalar
+from .core.date_analyzer import is_valid_date
 from .core.file_parser import parse_file
 from .core.profiler import profile_dataframe
 from .core.validator import validate_cleaning
@@ -192,6 +193,38 @@ def file_preview(
     page_size: int = Query(25, ge=1, le=100),
 ):
     return preview(file_record(file_id, request)["df"], page, page_size)
+
+
+@app.get("/api/files/{file_id}/invalid-dates")
+def invalid_dates(
+    file_id: str,
+    request: Request,
+    column: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+):
+    record = file_record(file_id, request)
+    if column not in record["df"]:
+        raise HTTPException(422, "Unknown column")
+    selected = next(
+        c for c in record["profile"]["columns"] if c["column_name"] == column
+    )
+    if "date_analysis" not in selected:
+        raise HTTPException(422, "This column is not a detected date column")
+    rows, count = [], 0
+    start, end = (page - 1) * page_size, page * page_size
+    for index, value in record["df"][column].items():
+        if not missing(value) and not is_valid_date(value):
+            if start <= count < end:
+                rows.append(
+                    {
+                        "row_index": int(index),
+                        "spreadsheet_row": int(index) + 2,
+                        "value": scalar(value),
+                    }
+                )
+            count += 1
+    return {"rows": rows, "total": count, "page": page, "page_size": page_size}
 
 
 @app.get("/api/files/{file_id}/profile")

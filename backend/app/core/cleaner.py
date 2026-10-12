@@ -1,7 +1,8 @@
 import re
 
 from .common import missing, numeric
-from .date_analyzer import parse_date
+from .currency import normalize_currency, parse_currency
+from .date_analyzer import is_valid_date, parse_date
 from .type_detector import BOOLEAN_MAP
 
 
@@ -30,16 +31,19 @@ def normalize_numeric(series, settings):
             return v
         try:
             text = str(v).strip()
-            number = numeric(v)
+            try:
+                number, marker = parse_currency(v)
+            except ValueError:
+                number, marker = numeric(v), None
             # Preserve currency identity. Different currencies are never merged.
-            prefix = text[0] if text and text[0] in "$€£" else ""
+            prefix = marker or (text[0] if text and text[0] in "$€£" else "")
             result = format(number, "f")
             if "." in result:
                 result = result.rstrip("0").rstrip(".")
             if text.endswith("%"):
                 result += "%"
             if prefix:
-                result = prefix + result
+                result = prefix + (" " if prefix.isalpha() else "") + result
             return result
         except ValueError:
             return v
@@ -71,6 +75,39 @@ def normalize_dates(series, settings):
             return v
 
     return series.map(convert)
+
+
+def resolve_invalid_dates(series, settings):
+    result = series.copy(deep=True)
+    action = settings.get("action", "manual")
+    if action == "empty":
+        return result.map(
+            lambda value: (
+                None if not missing(value) and not is_valid_date(value) else value
+            )
+        )
+    if action != "manual":
+        raise ValueError("Choose empty or manual date correction")
+    for key, replacement in settings.get("replacements", {}).items():
+        try:
+            row = int(key)
+        except (ValueError, TypeError):
+            raise ValueError("Invalid row reference")
+        if row not in result.index:
+            raise ValueError("The selected row no longer exists")
+        if missing(result.loc[row]) or is_valid_date(result.loc[row]):
+            raise ValueError("Manual correction only applies to invalid dates")
+        if replacement is not None:
+            if (
+                not isinstance(replacement, str)
+                or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", replacement)
+                or not is_valid_date(replacement)
+            ):
+                raise ValueError(
+                    "Manual replacements must be valid YYYY-MM-DD dates or empty cells"
+                )
+        result.loc[row] = replacement
+    return result
 
 
 def remove_duplicates(df, subset=None):
@@ -113,6 +150,10 @@ def apply_cleaning_plan(df, approved_plan):
                 "normalize_numeric": lambda: normalize_numeric(series, settings),
                 "normalize_boolean": lambda: normalize_boolean(series),
                 "normalize_dates": lambda: normalize_dates(series, settings),
+                "resolve_invalid_dates": lambda: resolve_invalid_dates(
+                    series, settings
+                ),
+                "normalize_currency": lambda: normalize_currency(series, settings),
             }
             if operation not in functions:
                 raise ValueError("Unknown operation")

@@ -206,3 +206,131 @@ def test_mixed_numeric_units_are_preserved():
         "$20",
         "€30",
     ]
+
+
+def test_nonsense_dates_detected_without_valid_dates_or_column_hint():
+    values = pd.Series(["88-99-2089", "31/02/2025"], name="Event")
+    report = profile_column(values)
+    assert report["detected_type"] == "date"
+    assert report["date_analysis"]["invalid_count"] == 2
+    assert [i["issue"] for i in report["issues"]] == ["invalid_dates"]
+    assert (
+        detect_column_type(
+            pd.Series(["Janitor", "Maybe", "October festival"], name="Notes")
+        )["type"]
+        == "text"
+    )
+
+
+def test_invalid_dates_can_only_be_cleared_or_corrected_with_approval():
+    from app.core.cleaner import resolve_invalid_dates
+
+    df = pd.DataFrame(
+        {"Event": ["88-99-2089", "2025-10-05", "05/10/2025", "31/02/2025"]}
+    )
+    original = df.copy(deep=True)
+    plan = generate_cleaning_plan(df)
+    operation = next(o for o in plan if o["operation"] == "resolve_invalid_dates")
+    assert not operation["enabled"]
+    preserved, _ = apply_cleaning_plan(df, plan)
+    pd.testing.assert_frame_equal(preserved, df)
+    operation.update(enabled=True, parameters={"action": "empty"})
+    cleaned, logs = apply_cleaning_plan(df, [operation])
+    assert cleaned["Event"].tolist() == [None, "2025-10-05", "05/10/2025", None]
+    assert logs[0]["modified_values"] == 2
+    operation["parameters"] = {
+        "action": "manual",
+        "replacements": {"0": "2025-10-06", "3": None},
+    }
+    cleaned, logs = apply_cleaning_plan(df, [operation])
+    assert cleaned["Event"].tolist() == ["2025-10-06", "2025-10-05", "05/10/2025", None]
+    for replacements in (
+        {"0": "2025-99-88"},
+        {"0": "05/10/2025"},
+        {"1": None},
+        {"2": "2025-05-10"},
+        {"999": None},
+    ):
+        with pytest.raises(ValueError):
+            resolve_invalid_dates(
+                df["Event"], {"action": "manual", "replacements": replacements}
+            )
+    pd.testing.assert_frame_equal(df, original)
+
+
+@pytest.mark.parametrize(
+    "values",
+    [
+        ["$100", "USD 200", "300"],
+        ["100 USD", "200", "300 usd"],
+        ["100", "200", "$300"],
+        ["€100", "EUR 200", "300"],
+    ],
+)
+def test_currency_mixed_labels_detected_and_suggested(values):
+    report = profile_column(pd.Series(values, name="Amount"))
+    assert report["detected_type"] == "currency"
+    issue = next(i for i in report["issues"] if i["issue"] == "currency_inconsistency")
+    assert issue["count"] == 3 and issue["formats"]["bare number"] >= 1
+    plan = generate_cleaning_plan(pd.DataFrame({"Amount": values}))
+    operation = next(o for o in plan if o["operation"] == "normalize_currency")
+    assert not operation["enabled"] and not operation["parameters"]["assume_unlabelled"]
+
+
+def test_currency_standardization_requires_explicit_assumptions_and_preserves_other_units():
+    from app.core.currency import normalize_currency
+
+    values = pd.Series(
+        ["$100.00", "USD 200.00", "300.00", "EUR 400", "€500", "invalid", "001"]
+    )
+    original = values.copy(deep=True)
+    safe = normalize_currency(values, {"currency": "USD", "format": "code"})
+    assert safe.tolist() == [
+        "$100.00",
+        "USD 200",
+        "300.00",
+        "EUR 400",
+        "€500",
+        "invalid",
+        "001",
+    ]
+    approved = normalize_currency(
+        values,
+        {
+            "currency": "USD",
+            "format": "code",
+            "assume_unlabelled": True,
+            "symbol_aliases": ["$"],
+        },
+    )
+    assert approved.tolist() == [
+        "USD 100",
+        "USD 200",
+        "USD 300",
+        "EUR 400",
+        "€500",
+        "invalid",
+        "USD 1",
+    ]
+    numeric = normalize_currency(
+        values,
+        {
+            "currency": "USD",
+            "format": "number",
+            "assume_unlabelled": True,
+            "symbol_aliases": ["$"],
+        },
+    )
+    assert numeric.tolist() == ["100", "200", "300", "EUR 400", "€500", "invalid", "1"]
+    for settings in (
+        {"currency": ""},
+        {"currency": "EUR", "symbol_aliases": ["$"]},
+        {"currency": "USD", "symbol_aliases": ["EUR"]},
+    ):
+        with pytest.raises(ValueError):
+            normalize_currency(values, settings)
+    pd.testing.assert_series_equal(values, original)
+    report = profile_column(pd.Series(["001", "002", "$3"], name="Customer_ID"))
+    assert report["detected_type"] == "identifier" and not any(
+        i["issue"] == "currency_inconsistency" for i in report["issues"]
+    )

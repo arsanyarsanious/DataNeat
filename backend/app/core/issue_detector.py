@@ -2,7 +2,8 @@ import re
 from collections import defaultdict
 
 from .common import missing
-from .type_detector import is_boolean, is_date, is_decimal, is_integer
+from .currency import analyze_currency_column
+from .type_detector import is_boolean, is_decimal, is_integer
 
 
 def issue(series, kind, values, **extra):
@@ -55,8 +56,6 @@ def detect_type_mismatches(series, detected_type):
         "decimal": is_decimal,
         "currency": is_decimal,
         "percentage": is_decimal,
-        "date": is_date,
-        "datetime": is_date,
     }.get(kind)
     return issue(
         series,
@@ -65,7 +64,22 @@ def detect_type_mismatches(series, detected_type):
     )
 
 
+def detect_currency_inconsistency(series):
+    analysis = analyze_currency_column(series)
+    return {
+        "issue": "currency_inconsistency",
+        "column": str(series.name),
+        "count": analysis["affected_rows"] if analysis["inconsistent"] else 0,
+        "examples": [str(v) for v in series if not missing(v)][:5],
+        "formats": analysis["formats"],
+        "explanation": "Currency labels and bare amounts are mixed. Choose a currency and explicitly confirm any unlabelled amounts before standardizing. No exchange-rate conversion is performed.",
+    }
+
+
 def detect_column_issues(series, detected_type):
+    kind = (
+        detected_type.get("type") if isinstance(detected_type, dict) else detected_type
+    )
     return [
         v
         for v in [
@@ -73,6 +87,7 @@ def detect_column_issues(series, detected_type):
             detect_whitespace_issues(series),
             detect_case_inconsistency(series),
             detect_type_mismatches(series, detected_type),
+            *([detect_currency_inconsistency(series)] if kind != "identifier" else []),
         ]
         if v["count"]
     ]

@@ -54,6 +54,14 @@ Open `http://localhost:3000`. Python and npm lockfiles reproduce the validated d
 
 `sample_data/messy_customers.csv` and `sample_data/messy_workbook.xlsx` are real test inputs. No analysis results are hardcoded into the UI.
 
+### Resolving date and currency issues
+
+Analysis now lists issues alphabetically under prominent column names; columns with no issues are collapsed separately. The cleaning plan uses the same column grouping, and results group unresolved issues by column.
+
+Date-shaped values such as `88-99-2089` are recognized as invalid even when the column contains no valid dates. Under **Resolve Invalid Dates**, explicitly enable the operation, then choose either **Replace all invalid dates with empty cells** or **Correct individual rows manually**. Manual controls show the original invalid value and spreadsheet row number (including the header); enter a valid `YYYY-MM-DD` date or select that row's empty-cell checkbox. Paging does not discard your selected corrections. Unedited rows and valid/ambiguous dates are preserved by this operation.
+
+Mixed currency notation (`$100`, `200 USD`, `300`) is flagged with counts for each representation. Under **Normalize Currency**, choose the intended currency and output notation (code, supported symbol, or numbers only). Explicitly confirm whether bare numbers use that currency, and whether ambiguous symbols such as `$` or `¥` refer to it. Unconfirmed values and other currencies remain unchanged. For example, approving USD, bare amounts, and `$` produces `USD 100`, `USD 200`, and `USD 300`; `EUR 400` stays as `EUR 400`. There is no exchange-rate conversion. Supported ISO codes are listed in the currency selector; unsupported formats remain unchanged.
+
 ### Preservation rules
 
 - CSV values are read without pandas type coercion, including leading zeros, whitespace, and literal missing markers. Encoding and delimiter are detected.
@@ -113,6 +121,7 @@ React, TypeScript, Tailwind CSS, Lucide, shadcn/ui component conventions, and Ta
 | POST | `/api/files/upload` | Multipart `file`, optional `sheet`; returns profile, preview, plan |
 | GET | `/api/files/{file_id}/preview` | `page` and `page_size` (1–100) |
 | GET | `/api/files/{file_id}/profile` | Integrated original profile |
+| GET | `/api/files/{file_id}/invalid-dates` | Session-authorized, paginated invalid rows for the `column` query parameter |
 | GET | `/api/files/{file_id}/issues` | Column issues and duplicate count |
 | GET | `/api/files/{file_id}/cleaning-plan` | Suggested operations |
 | POST | `/api/files/{file_id}/preview-cleaning` | Preview `{ "operations": [...] }` without saving changes |
@@ -122,7 +131,7 @@ React, TypeScript, Tailwind CSS, Lucide, shadcn/ui component conventions, and Ta
 | GET | `/api/jobs/{job_id}/download` | `format=csv`, `xlsx`, or `report` |
 | DELETE | `/api/files/{file_id}` | Delete stored upload and all associated jobs |
 
-Operations require `enabled: true` to execute. Supported names: `trim_whitespace`, `normalize_missing_values`, `normalize_capitalization`, `normalize_numeric`, `normalize_boolean`, `normalize_dates`, `remove_duplicates`, `rename_column`. See OpenAPI and the generated cleaning plan for schema and parameters. API scripts must retain the `dataneat_session` cookie; identifiers alone never authorize access.
+Operations require `enabled: true` to execute. Supported names: `trim_whitespace`, `normalize_missing_values`, `normalize_capitalization`, `normalize_numeric`, `normalize_boolean`, `normalize_dates`, `resolve_invalid_dates`, `normalize_currency`, `remove_duplicates`, `rename_column`. See OpenAPI and the generated cleaning plan for schema and parameters. API scripts must retain the `dataneat_session` cookie; identifiers alone never authorize access.
 
 ## Environment variables
 
@@ -192,7 +201,7 @@ Run exactly one backend worker. Scaling to multiple processes requires shared jo
 
 Parsing, profiling, previews of cleaning, and validation are bounded but operate in memory. Expensive cleaning runs in the background; initial upload analysis awaits a threadpool result. Near-limit or highly irregular spreadsheets can still need substantial memory. There is no large-file benchmarking claim.
 
-Only the selected worksheet is exported. Workbook styles, merged cells, charts, macros, formula evaluation, and arbitrary Excel display formats are not preserved. Formulas are treated as untrusted text and escaped on export. Date support is intentionally limited to the documented formats, ISO datetimes, and English month names. Ambiguous date confirmation applies to the entire selected column; inspect mixed-origin columns before approving it. Unsupported numeric locales remain unchanged; there is no currency conversion or automatic missing-value imputation. Type detection is heuristic, and unmatched or unusual formats may need manual correction outside this MVP.
+Only the selected worksheet is exported. Workbook styles, merged cells, charts, macros, formula evaluation, and arbitrary Excel display formats are not preserved. Formulas are treated as untrusted text and escaped on export. Date support is intentionally limited to the documented formats, ISO datetimes, and English month names. Ambiguous date confirmation applies to the entire selected column; inspect mixed-origin columns before approving it. Unsupported numeric locales remain unchanged; supported ISO currency codes and symbols can be standardized after explicit approval, but there is no currency conversion or automatic missing-value imputation. Type detection is heuristic, and unmatched or unusual formats may need manual correction outside this MVP.
 
 ## Recommended next improvements
 

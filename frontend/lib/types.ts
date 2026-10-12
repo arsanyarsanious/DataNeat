@@ -4,6 +4,7 @@ export type Issue = {
   count: number;
   examples: string[];
   conflicting_categories?: number;
+  formats?: Record<string, number>;
 };
 export type DateAnalysis = {
   patterns: Record<string, number>;
@@ -107,11 +108,38 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     credentials: "same-origin",
   });
   const body = await response.json();
-  if (!response.ok)
-    throw new Error(
+  if (!response.ok) {
+    const message =
       typeof body.detail === "string"
         ? body.detail
-        : "Request failed. Check your settings and retry.",
-    );
+        : Array.isArray(body.detail)
+          ? body.detail
+              .map((item: { msg: string }) =>
+                item.msg.replace(/^Value error, /, ""),
+              )
+              .join("; ")
+          : "Request failed. Check your settings and retry.";
+    throw new Error(message);
+  }
   return body;
+}
+
+export type InvalidDateRows = {
+  rows: { row_index: number; spreadsheet_row: number; value: unknown }[];
+  total: number;
+  page: number;
+  page_size: number;
+};
+
+// Share one bootstrap request so simultaneous first requests cannot replace the session cookie.
+let sessionBootstrap: Promise<{ max_upload_mb: number }> | null = null;
+export function initializeSession() {
+  if (!sessionBootstrap)
+    sessionBootstrap = api<{ max_upload_mb: number }>("/health").catch(
+      (error) => {
+        sessionBootstrap = null;
+        throw error;
+      },
+    );
+  return sessionBootstrap;
 }
