@@ -1,6 +1,10 @@
+import re
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
+
+from ..core.currency import CURRENCY_CODES
+from ..core.date_analyzer import is_valid_date
 
 
 class Operation(BaseModel):
@@ -13,6 +17,8 @@ class Operation(BaseModel):
         "normalize_numeric",
         "normalize_boolean",
         "normalize_dates",
+        "resolve_invalid_dates",
+        "normalize_currency",
         "remove_duplicates",
         "rename_column",
     ]
@@ -58,6 +64,54 @@ class Operation(BaseModel):
                 raise ValueError(
                     "subset must be null or a nonempty list of column names"
                 )
+        if self.operation == "resolve_invalid_dates":
+            if settings.get("action", "manual") not in ("manual", "empty"):
+                raise ValueError("Choose manual or empty for invalid dates")
+            replacements = settings.get("replacements", {})
+            if not isinstance(replacements, dict) or len(replacements) > 100000:
+                raise ValueError("Invalid row replacements")
+            for row, value in replacements.items():
+                if not isinstance(row, str) or not row.isdigit():
+                    raise ValueError("Invalid row reference")
+                if value is not None and (
+                    not isinstance(value, str)
+                    or not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)
+                    or not is_valid_date(value)
+                ):
+                    raise ValueError(
+                        "Enter a valid YYYY-MM-DD date or choose an empty cell"
+                    )
+        if self.operation == "normalize_currency" and self.enabled:
+            if settings.get("currency") not in CURRENCY_CODES:
+                raise ValueError("Choose the intended currency")
+            if settings.get("format", "code") not in ("code", "symbol", "number"):
+                raise ValueError("Choose code, symbol, or number output")
+            if settings.get("format") == "symbol" and settings["currency"] not in (
+                "USD",
+                "EUR",
+                "GBP",
+            ):
+                raise ValueError("Symbol output supports USD, EUR, and GBP")
+            if not isinstance(settings.get("assume_unlabelled", False), bool):
+                raise ValueError("Confirm unlabelled amounts explicitly")
+            aliases = settings.get("symbol_aliases", [])
+            if not isinstance(aliases, list) or any(
+                v not in ("$", "¥") for v in aliases
+            ):
+                raise ValueError("Only ambiguous symbols may be explicitly assigned")
+            if "$" in aliases and settings["currency"] not in (
+                "USD",
+                "CAD",
+                "AUD",
+                "NZD",
+                "SGD",
+                "HKD",
+            ):
+                raise ValueError(
+                    "$ can only be assigned to a supported dollar currency"
+                )
+            if "¥" in aliases and settings["currency"] not in ("JPY", "CNY"):
+                raise ValueError("¥ can only be assigned to JPY or CNY")
         if self.operation == "rename_column":
             name = settings.get("name")
             if not isinstance(name, str) or not name.strip() or len(name) > 512:

@@ -1,6 +1,7 @@
 import re
 
 from .common import missing, numeric
+from .currency import currency_marker, parse_currency
 from .date_analyzer import detect_date_pattern, is_valid_date
 
 BOOLEAN_MAP = {
@@ -21,7 +22,10 @@ def is_boolean(value):
 
 def is_integer(value):
     try:
-        number = numeric(value)
+        try:
+            number = numeric(value)
+        except ValueError:
+            number = parse_currency(value)[0]
         return number == number.to_integral_value()
     except ValueError:
         return False
@@ -29,7 +33,10 @@ def is_integer(value):
 
 def is_decimal(value):
     try:
-        numeric(value)
+        try:
+            numeric(value)
+        except ValueError:
+            parse_currency(value)
         return True
     except ValueError:
         return False
@@ -49,6 +56,26 @@ def detect_column_type(series, threshold=0.8):
         r"(^|[_\s])(id|identifier|code|zip|postal|phone|sku)($|[_\s])", name
     ) or any(re.fullmatch(r"0\d+", s) for s in strings):
         return {"type": "identifier", "match_score": 1.0}
+    # Recognize the structure even when every date is impossible (e.g. 88-99-2089).
+    date_shapes = sum(bool(detect_date_pattern(v)) for v in values) / len(values)
+    if date_shapes >= threshold:
+        kind = (
+            "datetime"
+            if all(detect_date_pattern(v) == "ISO datetime" for v in values)
+            else "date"
+        )
+        return {
+            "type": kind,
+            "match_score": round(sum(is_date(v) for v in values) / len(values), 4),
+        }
+    if any(currency_marker(v) for v in values):
+        amount_score = sum(
+            is_decimal(v) and not str(v).strip().endswith("%") for v in values
+        ) / len(values)
+        if amount_score >= threshold or (
+            re.search("salary|amount|price|cost", name) and amount_score >= 0.5
+        ):
+            return {"type": "currency", "match_score": round(amount_score, 4)}
     checks = []
     if any(
         s.lower() in {"yes", "no", "true", "false", "y", "n"} for s in strings

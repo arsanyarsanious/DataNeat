@@ -26,8 +26,12 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table";
+import { ColumnAnalysis } from "@/components/column-analysis";
+import { InvalidDateControls } from "@/components/invalid-date-controls";
+import { CurrencyControls } from "@/components/currency-controls";
 import {
   api,
+  initializeSession,
   type Upload,
   type Operation,
   type Results,
@@ -58,7 +62,7 @@ export default function Home() {
     mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
-    void api<{ max_upload_mb: number }>("/health")
+    void initializeSession()
       .then((data) => setUploadLimit(data.max_upload_mb))
       .catch(() => {});
     const value = localStorage.getItem("dataneat-theme") === "dark";
@@ -92,6 +96,7 @@ export default function Home() {
     form.append("file", selected);
     if (sheet) form.append("sheet", sheet);
     try {
+      await initializeSession();
       const response = await new Promise<Upload>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open("POST", "/api/files/upload");
@@ -227,6 +232,18 @@ export default function Home() {
       setBusy(false);
     }
   }
+  const operationGroups = Array.from(new Set(operations.map((o) => o.column)))
+    .sort((a, b) =>
+      a === null
+        ? 1
+        : b === null
+          ? -1
+          : a.localeCompare(b, undefined, { numeric: true }),
+    )
+    .map((column) => ({
+      column,
+      operations: operations.filter((o) => o.column === column),
+    }));
   const profile =
     stage === "results" ? results?.validation.after : uploaded?.profile;
   return (
@@ -569,6 +586,7 @@ export default function Home() {
                         .join(", ")}
                     </div>
                   )}
+                  <ColumnAnalysis columns={profile.columns} />
                   <section className="panel">
                     <div className="panel-heading">
                       <h2>Spreadsheet preview</h2>
@@ -580,70 +598,6 @@ export default function Home() {
                       disabled={busy}
                     />
                   </section>
-                  <div className="column-grid">
-                    {profile.columns.map((c) => (
-                      <section className="column-card" key={c.column_name}>
-                        <div className="column-title">
-                          <h3>{c.column_name}</h3>
-                          <span className="type-tag">{c.detected_type}</span>
-                        </div>
-                        <div className="column-meta">
-                          <span>
-                            {Math.round(c.match_score * 100)}% type match
-                          </span>
-                          <span>{c.unique_count} unique</span>
-                        </div>
-                        <div className="column-samples">
-                          {c.sample_values.map((v, i) => (
-                            <span key={i}>{String(v)}</span>
-                          ))}
-                        </div>
-                        {c.issues.length ? (
-                          c.issues.map((i) => (
-                            <div key={i.issue} className="issue-row">
-                              <span>{label(i.issue)}</span>
-                              <span className="count-badge">
-                                {i.count}
-                                {i.conflicting_categories
-                                  ? ` rows / ${i.conflicting_categories} categories`
-                                  : ""}
-                              </span>
-                            </div>
-                          ))
-                        ) : (
-                          <div className="healthy">
-                            <CheckCheck size={15} />
-                            No issues detected
-                          </div>
-                        )}
-                        {c.date_analysis && (
-                          <div className="date-evidence">
-                            <strong>Date interpretation</strong>
-                            <p>
-                              {c.date_analysis.ambiguous_count} ambiguous ·{" "}
-                              {c.date_analysis.invalid_count} invalid
-                            </p>
-                            <p>
-                              Day-first evidence:{" "}
-                              {c.date_analysis.dd_mm_evidence} · Month-first:{" "}
-                              {c.date_analysis.mm_dd_evidence}
-                            </p>
-                            {c.date_analysis.conflicting_evidence && (
-                              <p className="warning-text">
-                                Conflicting formats. Review each ambiguous
-                                value.
-                              </p>
-                            )}
-                            <small>
-                              {Object.entries(c.date_analysis.patterns)
-                                .map(([k, v]) => `${k}: ${v}`)
-                                .join(" · ")}
-                            </small>
-                          </div>
-                        )}
-                      </section>
-                    ))}
-                  </div>
                 </>
               )}
               {stage === "configure" && (
@@ -669,132 +623,183 @@ export default function Home() {
                     Your original file is preserved. Invalid and ambiguous
                     values remain unchanged unless explicitly resolved.
                   </div>
-                  <div className="operation-list">
-                    {operations.map((o) => (
+                  <div className="column-operation-groups">
+                    {operationGroups.map((group) => (
                       <section
-                        key={o.id}
-                        className={`operation ${o.enabled ? "selected" : ""}`}
+                        key={group.column || "dataset"}
+                        className="column-operation-group"
+                        aria-label={
+                          group.column
+                            ? `Cleaning actions for column ${group.column}`
+                            : "Dataset cleaning actions"
+                        }
                       >
-                        <label className="operation-check">
-                          <input
-                            type="checkbox"
-                            checked={o.enabled}
-                            disabled={busy}
-                            onChange={(e) =>
-                              update(o.id, { enabled: e.target.checked })
-                            }
-                          />
-                          <span className="operation-icon">
-                            <WandSparkles size={18} />
+                        <div className="column-section-heading">
+                          <div>
+                            <span className="column-caption">
+                              {group.column ? "COLUMN" : "DATASET"}
+                            </span>
+                            <h3>{group.column || "Entire dataset"}</h3>
+                          </div>
+                          <span className="type-tag">
+                            {group.operations.length} cleaning actions
                           </span>
-                          <span>
-                            <strong>{label(o.operation)}</strong>
-                            <small>
-                              {o.column || "Entire dataset"} · up to{" "}
-                              {o.affected_rows} rows
-                            </small>
-                          </span>
-                        </label>
-                        <span className={`safety ${o.safety}`}>
-                          {o.safety === "safe"
-                            ? "Safe suggestion"
-                            : o.safety === "review"
-                              ? "Review required"
-                              : "Removes rows"}
-                        </span>
-                        <p>{o.explanation}</p>
-                        {o.operation === "normalize_dates" && (
-                          <label className="setting">
-                            Ambiguous date interpretation
-                            <select
-                              aria-label={`Date interpretation for ${o.column}`}
-                              value={String(o.parameters.interpretation)}
-                              onChange={(e) =>
-                                update(o.id, {
-                                  parameters: {
-                                    ...o.parameters,
-                                    interpretation: e.target.value,
-                                  },
-                                })
-                              }
+                        </div>
+                        <div className="operation-list">
+                          {group.operations.map((o) => (
+                            <section
+                              key={o.id}
+                              className={`operation ${o.enabled ? "selected" : ""}`}
                             >
-                              <option value="preserve">
-                                Preserve ambiguous values
-                              </option>
-                              <option value="day_first">
-                                I confirm day / month / year
-                              </option>
-                              <option value="month_first">
-                                I confirm month / day / year
-                              </option>
-                            </select>
-                          </label>
-                        )}
-                        {o.operation === "normalize_capitalization" && (
-                          <label className="setting">
-                            Capitalization
-                            <select
-                              aria-label={`Capitalization for ${o.column}`}
-                              value={String(o.parameters.strategy)}
-                              onChange={(e) =>
-                                update(o.id, {
-                                  parameters: { strategy: e.target.value },
-                                })
-                              }
-                            >
-                              {["title", "lower", "upper"].map((v) => (
-                                <option key={v}>{v}</option>
-                              ))}
-                            </select>
-                          </label>
-                        )}
-                        {o.operation === "normalize_missing_values" && (
-                          <label className="setting">
-                            Missing markers (comma-separated)
-                            <input
-                              aria-label={`Missing markers for ${o.column}`}
-                              value={(o.parameters.markers as string[]).join(
-                                ",",
+                              <label className="operation-check">
+                                <input
+                                  type="checkbox"
+                                  checked={o.enabled}
+                                  disabled={busy}
+                                  onChange={(e) =>
+                                    update(o.id, { enabled: e.target.checked })
+                                  }
+                                />
+                                <span className="operation-icon">
+                                  <WandSparkles size={18} />
+                                </span>
+                                <span>
+                                  <strong>{label(o.operation)}</strong>
+                                  <small>
+                                    {o.column || "Entire dataset"} · up to{" "}
+                                    {o.affected_rows} rows
+                                  </small>
+                                </span>
+                              </label>
+                              <span className={`safety ${o.safety}`}>
+                                {o.safety === "safe"
+                                  ? "Safe suggestion"
+                                  : o.safety === "review"
+                                    ? "Review required"
+                                    : "Removes rows"}
+                              </span>
+                              <p>{o.explanation}</p>
+                              {o.operation === "resolve_invalid_dates" &&
+                                uploaded && (
+                                  <InvalidDateControls
+                                    fileId={uploaded.file_id}
+                                    operation={o}
+                                    disabled={busy}
+                                    onChange={(parameters) =>
+                                      update(o.id, { parameters })
+                                    }
+                                  />
+                                )}
+                              {o.operation === "normalize_currency" && (
+                                <CurrencyControls
+                                  operation={o}
+                                  disabled={busy}
+                                  onChange={(parameters) =>
+                                    update(o.id, { parameters })
+                                  }
+                                />
                               )}
-                              onChange={(e) =>
-                                update(o.id, {
-                                  parameters: {
-                                    markers: e.target.value.split(","),
-                                  },
-                                })
-                              }
-                            />
-                          </label>
-                        )}
-                        {o.operation === "remove_duplicates" && (
-                          <label className="setting">
-                            Duplicate columns
-                            <select
-                              aria-label="Duplicate columns"
-                              value={
-                                o.parameters.subset
-                                  ? String((o.parameters.subset as string[])[0])
-                                  : ""
-                              }
-                              onChange={(e) =>
-                                update(o.id, {
-                                  parameters: {
-                                    subset: e.target.value
-                                      ? [e.target.value]
-                                      : null,
-                                  },
-                                })
-                              }
-                            >
-                              <option value="">
-                                All columns (complete rows)
-                              </option>
-                              {uploaded?.preview.columns.map((c) => (
-                                <option key={c}>{c}</option>
-                              ))}
-                            </select>
-                          </label>
-                        )}
+                              {o.operation === "normalize_dates" && (
+                                <label className="setting">
+                                  Ambiguous date interpretation
+                                  <select
+                                    aria-label={`Date interpretation for ${o.column}`}
+                                    value={String(o.parameters.interpretation)}
+                                    onChange={(e) =>
+                                      update(o.id, {
+                                        parameters: {
+                                          ...o.parameters,
+                                          interpretation: e.target.value,
+                                        },
+                                      })
+                                    }
+                                  >
+                                    <option value="preserve">
+                                      Preserve ambiguous values
+                                    </option>
+                                    <option value="day_first">
+                                      I confirm day / month / year
+                                    </option>
+                                    <option value="month_first">
+                                      I confirm month / day / year
+                                    </option>
+                                  </select>
+                                </label>
+                              )}
+                              {o.operation === "normalize_capitalization" && (
+                                <label className="setting">
+                                  Capitalization
+                                  <select
+                                    aria-label={`Capitalization for ${o.column}`}
+                                    value={String(o.parameters.strategy)}
+                                    onChange={(e) =>
+                                      update(o.id, {
+                                        parameters: {
+                                          strategy: e.target.value,
+                                        },
+                                      })
+                                    }
+                                  >
+                                    {["title", "lower", "upper"].map((v) => (
+                                      <option key={v}>{v}</option>
+                                    ))}
+                                  </select>
+                                </label>
+                              )}
+                              {o.operation === "normalize_missing_values" && (
+                                <label className="setting">
+                                  Missing markers (comma-separated)
+                                  <input
+                                    aria-label={`Missing markers for ${o.column}`}
+                                    value={(
+                                      o.parameters.markers as string[]
+                                    ).join(",")}
+                                    onChange={(e) =>
+                                      update(o.id, {
+                                        parameters: {
+                                          markers: e.target.value.split(","),
+                                        },
+                                      })
+                                    }
+                                  />
+                                </label>
+                              )}
+                              {o.operation === "remove_duplicates" && (
+                                <label className="setting">
+                                  Duplicate columns
+                                  <select
+                                    aria-label="Duplicate columns"
+                                    value={
+                                      o.parameters.subset
+                                        ? String(
+                                            (
+                                              o.parameters.subset as string[]
+                                            )[0],
+                                          )
+                                        : ""
+                                    }
+                                    onChange={(e) =>
+                                      update(o.id, {
+                                        parameters: {
+                                          subset: e.target.value
+                                            ? [e.target.value]
+                                            : null,
+                                        },
+                                      })
+                                    }
+                                  >
+                                    <option value="">
+                                      All columns (complete rows)
+                                    </option>
+                                    {uploaded?.preview.columns.map((c) => (
+                                      <option key={c}>{c}</option>
+                                    ))}
+                                  </select>
+                                </label>
+                              )}
+                            </section>
+                          ))}
+                        </div>
                       </section>
                     ))}
                   </div>
@@ -1011,19 +1016,10 @@ export default function Home() {
                         </span>
                       </div>
                       <div className="panel-body">
-                        {results.validation.remaining_issues.map((i, index) => (
-                          <div className="remaining-issue" key={index}>
-                            <strong>
-                              {i.column} · {label(i.issue)}
-                            </strong>
-                            <small>
-                              {i.count} affected rows
-                              {i.examples.length
-                                ? ` · ${i.examples.join(", ")}`
-                                : ""}
-                            </small>
-                          </div>
-                        ))}
+                        <ColumnAnalysis
+                          columns={results.validation.after.columns}
+                          compact
+                        />
                         {results.validation.after.duplicate_rows > 0 && (
                           <div className="remaining-issue">
                             {results.validation.after.duplicate_rows} duplicate

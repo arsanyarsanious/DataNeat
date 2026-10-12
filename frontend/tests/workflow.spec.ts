@@ -18,7 +18,9 @@ test("upload, review, preserve ambiguous dates, clean, download and delete", asy
   await expect(
     page.getByRole("heading", { name: "Meet your data." }),
   ).toBeVisible();
-  await expect(page.getByText("001", { exact: true }).first()).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "001", exact: true }).first(),
+  ).toBeVisible();
   await expect(
     page.getByText("Day-first evidence: 1 · Month-first: 0"),
   ).toBeVisible();
@@ -126,5 +128,160 @@ test("Excel worksheet selection and explicit date interpretation", async ({
   const download = page.waitForEvent("download");
   await page.getByRole("link", { name: "Download XLSX", exact: true }).click();
   expect((await download).suggestedFilename()).toBe("dataneat-cleaned.xlsx");
+  await page.getByRole("button", { name: "Delete file", exact: true }).click();
+});
+
+test("invalid dates and currency issues are grouped by column and can be explicitly resolved", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("Choose spreadsheet").setInputFiles({
+    name: "issues.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(
+      "Event,Amount\n88-99-2089,$100\n31/02/2025,200 USD\n05/10/2025,300\n2025-10-05,400\n",
+    ),
+  });
+  await expect(
+    page.getByRole("heading", { name: "Meet your data." }),
+  ).toBeVisible();
+  const analysis = page.getByRole("region", {
+    name: "Analysis for column Event",
+  });
+  await expect(
+    analysis.getByRole("heading", { name: "Event", exact: true }),
+  ).toBeVisible();
+  await expect(
+    analysis.getByText("Invalid dates", { exact: true }),
+  ).toBeVisible();
+  await expect(analysis.getByText("88-99-2089", { exact: true })).toBeVisible();
+  const amount = page.getByRole("region", {
+    name: "Analysis for column Amount",
+  });
+  await expect(
+    amount.getByText("Mixed currency notation", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    amount.getByText("bare number: 2 rows", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.locator(".column-analysis .column-section-heading h3"),
+  ).toHaveText(["Amount", "Event"]);
+  await page.getByRole("button", { name: "Review cleaning plan" }).click();
+  const dateGroup = page.getByRole("region", {
+    name: "Cleaning actions for column Event",
+  });
+  const dates = dateGroup
+    .locator(".operation")
+    .filter({ has: page.getByLabel("Invalid date action for Event") });
+  await expect(dates.getByRole("checkbox").first()).not.toBeChecked();
+  await dates.getByRole("checkbox").first().check();
+  await page.getByLabel("Corrected date for Event row 2").fill("2025-10-06");
+  await page.getByLabel("Empty Event row 3", { exact: true }).check();
+  const money = page
+    .getByRole("region", { name: "Cleaning actions for column Amount" })
+    .locator(".operation")
+    .filter({ has: page.getByLabel("Currency for Amount", { exact: true }) });
+  await money.getByRole("checkbox").first().check();
+  await page
+    .getByLabel("Currency for Amount", { exact: true })
+    .selectOption("USD");
+  await page
+    .getByLabel("Assume bare amounts are USD in Amount", { exact: true })
+    .check();
+  await page.getByLabel("Assign $ to USD in Amount", { exact: true }).check();
+  await page
+    .getByLabel("Currency for Amount", { exact: true })
+    .selectOption("EUR");
+  await expect(
+    page.getByLabel("Assume bare amounts are EUR in Amount", { exact: true }),
+  ).not.toBeChecked();
+  await page
+    .getByLabel("Currency for Amount", { exact: true })
+    .selectOption("USD");
+  await page
+    .getByLabel("Assume bare amounts are USD in Amount", { exact: true })
+    .check();
+  await page.getByLabel("Assign $ to USD in Amount", { exact: true }).check();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= window.innerWidth,
+    ),
+  ).toBe(true);
+  await page.screenshot({
+    path: "test-results/column-cleaning-mobile.png",
+    fullPage: true,
+    caret: "initial",
+  });
+  await page.setViewportSize({ width: 1280, height: 720 });
+
+  await page.getByRole("button", { name: "Preview changes" }).click();
+  const after = page
+    .locator(".comparison .panel")
+    .filter({ has: page.getByRole("heading", { name: "After (preview)" }) });
+  await expect(
+    after.getByRole("cell", { name: "2025-10-06", exact: true }),
+  ).toBeVisible();
+  await expect(
+    after.getByRole("cell", { name: "empty", exact: true }),
+  ).toBeVisible();
+  await expect(
+    after.getByRole("cell", { name: "05/10/2025", exact: true }),
+  ).toBeVisible();
+  await expect(
+    after.getByRole("cell", { name: "USD 300", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Apply cleaning" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Cleaning complete", exact: true }),
+  ).toBeVisible();
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Download CSV", exact: true }).click();
+  const result = await downloaded;
+  const text = await fs.readFile((await result.path())!, "utf8");
+  expect(text).toContain("2025-10-06,USD 100");
+  expect(text).toContain(",USD 200");
+  expect(text).toContain("05/10/2025,USD 300");
+  expect(text).not.toContain("88-99-2089");
+  await page.screenshot({
+    path: "test-results/column-issue-results.png",
+    fullPage: true,
+    caret: "initial",
+  });
+  await page.getByRole("button", { name: "Delete file", exact: true }).click();
+});
+
+test("impossible dates can be cleared without changing valid or ambiguous dates", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("Choose spreadsheet").setInputFiles({
+    name: "dates.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(
+      "Event\n88-99-2089\n31/02/2025\n05/10/2025\n2025-10-05\n",
+    ),
+  });
+  await page.getByRole("button", { name: "Review cleaning plan" }).click();
+  const dates = page
+    .locator(".operation")
+    .filter({ has: page.getByLabel("Invalid date action for Event") });
+  await dates.getByRole("checkbox").first().check();
+  await page.getByLabel("Invalid date action for Event").selectOption("empty");
+  await page.getByRole("button", { name: "Apply cleaning" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Cleaning complete", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "empty", exact: true }),
+  ).toHaveCount(2);
+  await expect(
+    page.getByRole("cell", { name: "05/10/2025", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "2025-10-05", exact: true }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "Delete file", exact: true }).click();
 });

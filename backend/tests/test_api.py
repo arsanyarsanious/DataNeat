@@ -237,3 +237,74 @@ def test_invalid_cleaning_parameters_are_rejected(client):
             json={"operations": [{**operation, "enabled": True}]},
         )
         assert response.status_code == 422
+
+
+def test_invalid_date_rows_are_paginated_isolated_and_correctable(client):
+    result = upload(
+        client,
+        b"Event,Amount\n88-99-2089,$100\n31/02/2025,200 USD\n05/10/2025,300\n2025-10-05,EUR 400\n",
+    )
+    fid = result["file_id"]
+    rows = client.get(
+        f"/api/files/{fid}/invalid-dates",
+        params={"column": "Event", "page_size": 1, "page": 2},
+    ).json()
+    assert rows["total"] == 2 and rows["rows"] == [
+        {"row_index": 1, "spreadsheet_row": 3, "value": "31/02/2025"}
+    ]
+    outsider = TestClient(app)
+    assert (
+        outsider.get(f"/api/files/{fid}/invalid-dates?column=Event").status_code == 404
+    )
+    assert (
+        client.get(f"/api/files/{fid}/invalid-dates?column=Amount").status_code == 422
+    )
+    dates = next(o for o in result["plan"] if o["operation"] == "resolve_invalid_dates")
+    dates.update(
+        enabled=True,
+        parameters={"action": "manual", "replacements": {"0": "2025-10-06", "1": None}},
+    )
+    money = next(o for o in result["plan"] if o["operation"] == "normalize_currency")
+    money.update(
+        enabled=True,
+        parameters={
+            "currency": "USD",
+            "format": "code",
+            "assume_unlabelled": True,
+            "symbol_aliases": ["$"],
+        },
+    )
+    body = {"operations": [dates, money]}
+    preview = client.post(f"/api/files/{fid}/preview-cleaning", json=body)
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["after"]["rows"] == [
+        ["2025-10-06", "USD 100"],
+        [None, "USD 200"],
+        ["05/10/2025", "USD 300"],
+        ["2025-10-05", "EUR 400"],
+    ]
+    job = client.post(f"/api/files/{fid}/clean", json=body).json()["job_id"]
+    wait_job(client, job)
+    results = client.get(f"/api/jobs/{job}/results").json()
+    assert results["validation"]["invalid_dates_resolved"] == 2
+    assert (
+        results["validation"]["unresolved_issues"] > 0
+    )  # EUR and ambiguity still need review.
+    assert client.get(f"/api/files/{fid}/preview").json()["rows"][0] == [
+        "88-99-2089",
+        "$100",
+    ]
+    for op in (
+        {
+            **dates,
+            "parameters": {"action": "manual", "replacements": {"0": "88-99-2089"}},
+        },
+        {**money, "parameters": {"currency": "USD", "assume_unlabelled": "yes"}},
+        {**money, "parameters": {"currency": "USD", "symbol_aliases": ["EUR"]}},
+    ):
+        assert (
+            client.post(
+                f"/api/files/{fid}/preview-cleaning", json={"operations": [op]}
+            ).status_code
+            == 422
+        )

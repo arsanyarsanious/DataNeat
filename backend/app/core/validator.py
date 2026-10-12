@@ -14,7 +14,10 @@ def validate_cleaning(original, cleaned, logs):
         "missing_after": after["missing_count"],
         "duplicates_removed": len(original) - len(cleaned),
         "dates_standardized": modified(["normalize_dates"]),
-        "numeric_values_standardized": modified(["normalize_numeric"]),
+        "numeric_values_standardized": modified(
+            ["normalize_numeric", "normalize_currency"]
+        ),
+        "invalid_dates_resolved": modified(["resolve_invalid_dates"]),
         "text_values_modified": modified(
             ["trim_whitespace", "normalize_capitalization"]
         ),
