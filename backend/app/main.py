@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
-from .core.cleaner import apply_cleaning_plan
+from .core.cleaner import apply_cleaning_plan, validate_imputation_approval
 from .core.cleaning_plan import generate_cleaning_plan
 from .core.common import missing, scalar
 from .core.date_analyzer import is_valid_date
@@ -120,9 +120,24 @@ def health():
     return {"status": "ok", "max_upload_mb": MAX_UPLOAD // (1024 * 1024)}
 
 
-def preview(df, page=1, page_size=25):
+def preview(df, page=1, page_size=25, logs=None):
     part = df.iloc[(page - 1) * page_size : page * page_size]
+    imputed = set()
+    for log in logs or []:
+        if log["operation"] == "impute_missing_values":
+            imputed.update(
+                (cell["row_index"], log["column"])
+                for cell in log.get("imputed_cells", [])
+            )
+        elif log["operation"] == "rename_column":
+            imputed = {
+                (row, log["parameters"]["name"] if col == log["column"] else col)
+                for row, col in imputed
+            }
     return {
+        "is_imputed": [
+            [(scalar(row), col) in imputed for col in df.columns] for row in part.index
+        ],
         "columns": list(df.columns),
         "rows": [
             [scalar(v) for v in row] for row in part.itertuples(index=False, name=None)
@@ -250,11 +265,11 @@ def plan(file_id: str, request: Request):
 def preview_cleaning(file_id: str, body: CleaningRequest, request: Request):
     original = file_record(file_id, request)["df"]
     cleaned, logs = apply_cleaning_plan(
-        original, [o.model_dump() for o in body.operations]
+        original, [o.model_dump() for o in body.operations], require_approval=False
     )
     return {
         "before": preview(original),
-        "after": preview(cleaned),
+        "after": preview(cleaned, logs=logs),
         "operations": logs,
         "validation": validate_cleaning(original, cleaned, logs),
     }
@@ -277,18 +292,21 @@ def do_job(job_id, record, operations):
                     operations=logs,
                     validation=validation,
                 )
-    except Exception:
+    except Exception as exc:
         with store.lock:
             if job_id in store.jobs:
                 store.jobs[job_id].update(
                     status="failed",
-                    error="Cleaning failed. Check operation parameters and retry.",
+                    error=str(exc)
+                    if isinstance(exc, ValueError)
+                    else "Cleaning failed. Check operation parameters and retry.",
                 )
 
 
 @app.post("/api/files/{file_id}/clean", status_code=202)
 def clean(file_id: str, body: CleaningRequest, request: Request):
     record = file_record(file_id, request)
+    validate_imputation_approval([o.model_dump() for o in body.operations])
     with store.lock:
         if (
             len(store.jobs) >= 100
@@ -338,7 +356,7 @@ def results(
 ):
     job = job_record(job_id, request, True)
     return {
-        "preview": preview(job["df"], page, page_size),
+        "preview": preview(job["df"], page, page_size, logs=job["operations"]),
         "validation": job["validation"],
         "operations": job["operations"],
         "filename": job["filename"],

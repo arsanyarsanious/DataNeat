@@ -62,7 +62,25 @@ export function DataTable({
                   {(data.page - 1) * data.page_size + i + 1}
                 </td>
                 {row.getVisibleCells().map((c) => (
-                  <td key={c.id}>
+                  <td
+                    key={c.id}
+                    className={
+                      data.is_imputed?.[i]?.[Number(c.column.id)]
+                        ? "imputed-cell"
+                        : undefined
+                    }
+                    title={
+                      data.is_imputed?.[i]?.[Number(c.column.id)]
+                        ? "Imputed estimate, not an observed value"
+                        : undefined
+                    }
+                    data-is-imputed={
+                      data.is_imputed?.[i]?.[Number(c.column.id)] || undefined
+                    }
+                  >
+                    {data.is_imputed?.[i]?.[Number(c.column.id)] && (
+                      <span className="imputed-badge">Estimated</span>
+                    )}
                     {flexRender(c.column.columnDef.cell, c.getContext())}
                   </td>
                 ))}

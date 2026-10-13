@@ -1,3 +1,5 @@
+import math
+
 """Offline phone formatting; a region is required to interpret local numbers."""
 
 import re
@@ -23,6 +25,8 @@ def phone_hint(name):
 
 def phone_text(value):
     if isinstance(value, Real) and not isinstance(value, bool):
+        if not math.isfinite(value):
+            raise ValueError("A phone number must be finite")
         if value != int(value):
             raise ValueError("A phone number cannot be fractional")
         text = str(int(value))

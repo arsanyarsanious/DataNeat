@@ -151,6 +151,25 @@ def generate_cleaning_plan(df, report=None):
                 "Use ISO dates. Ambiguous values stay unchanged unless you choose an interpretation.",
                 {"interpretation": "preserve", "include_time": kind == "datetime"},
             )
+    for c in report["columns"]:
+        if c["missing_count"]:
+            info = c["imputation"]
+            add(
+                c["column_name"],
+                "impute_missing_values",
+                "missing_values",
+                c["missing_count"],
+                "review",
+                "Imputation: fill only missing cells after approved normalization. Estimates can distort distributions; review the preview and explicitly confirm before applying.",
+                {
+                    "method": "preserve",
+                    "group_by": [],
+                    "order_by": "",
+                    "single_entity": False,
+                    "confirmed": False,
+                },
+            )
+            plan[-1]["recommendation"] = info
     if report["duplicate_rows"]:
         add(
             None,

@@ -3,6 +3,7 @@ import re
 from .common import missing, numeric
 from .currency import normalize_currency, parse_currency
 from .date_analyzer import is_valid_date, parse_date
+from .imputation import impute_missing_values
 from .percentage import normalize_percentage
 from .phone import normalize_phone
 from .symbols import normalize_symbols
@@ -117,10 +118,48 @@ def remove_duplicates(df, subset=None):
     return df.drop_duplicates(subset=subset).copy()
 
 
-def apply_cleaning_plan(df, approved_plan):
+def validate_imputation_approval(approved_plan):
+    for op in approved_plan:
+        if (
+            op.get("enabled")
+            and op["operation"] == "impute_missing_values"
+            and op.get("parameters", {}).get("method", "preserve") != "preserve"
+            and op.get("parameters", {}).get("confirmed") is not True
+        ):
+            raise ValueError(
+                f"Confirm imputation estimates for {op.get('column')} after reviewing the preview"
+            )
+
+
+def apply_cleaning_plan(df, approved_plan, require_approval=True):
+    if require_approval:
+        validate_imputation_approval(approved_plan)
+    # Dependencies are run before imputation regardless of the submitted UI order.
+    priorities = {
+        "normalize_missing_values": 0,
+        "trim_whitespace": 1,
+        "normalize_numeric": 2,
+        "normalize_boolean": 2,
+        "normalize_dates": 2,
+        "resolve_invalid_dates": 2,
+        "impute_missing_values": 4,
+        "remove_duplicates": 5,
+        "rename_column": 6,
+    }
+    has_imputation = any(
+        op.get("enabled")
+        and op["operation"] == "impute_missing_values"
+        and op.get("parameters", {}).get("method", "preserve") != "preserve"
+        for op in approved_plan
+    )
+    ordered = (
+        sorted(approved_plan, key=lambda op: priorities.get(op["operation"], 3))
+        if has_imputation
+        else approved_plan
+    )
     result = df.copy(deep=True)
     logs = []
-    for op in approved_plan:
+    for op in ordered:
         if not op.get("enabled", False):
             continue
         column, operation, settings = (
@@ -129,7 +168,16 @@ def apply_cleaning_plan(df, approved_plan):
             op.get("parameters", {}),
         )
         rows_before = len(result)
-        if operation == "remove_duplicates":
+        audit = {}
+        if operation == "impute_missing_values":
+            try:
+                result, audit = impute_missing_values(
+                    result, column, settings.get("method", "preserve"), settings
+                )
+            except ValueError as exc:
+                raise ValueError(f"Imputation for {column}: {exc}") from exc
+            modified = audit["imputed_count"]
+        elif operation == "remove_duplicates":
             result = remove_duplicates(result, settings.get("subset"))
             modified = 0
         elif operation == "rename_column":
@@ -178,6 +226,7 @@ def apply_cleaning_plan(df, approved_plan):
                 "status": "applied",
                 "removed_rows": rows_before - len(result),
                 "parameters": settings,
+                **audit,
             }
         )
     return result, logs

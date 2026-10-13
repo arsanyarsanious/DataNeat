@@ -1560,3 +1560,54 @@ input:not([type="checkbox"]) {
 .phone-controls .setting {
   margin-left: 0;
 }
+
+.imputation-controls {
+  margin-top: 16px;
+  display: grid;
+  gap: 12px;
+}
+.imputation-controls h4 {
+  margin: 0;
+}
+.imputation-recommendation {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.imputation-groups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.imputation-groups label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.imputation-approval {
+  margin: 16px 0;
+  padding: 14px;
+}
+.imputation-audit {
+  margin: 20px 0;
+}
+.imputation-audit .panel-body > section {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.imputation-warning {
+  padding: 6px 0;
+  font-size: 13px;
+}
+.imputed-cell {
+  background: rgba(200, 155, 30, 0.14);
+}
+.imputed-badge {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+}

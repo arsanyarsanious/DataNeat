@@ -432,3 +432,122 @@ def test_complete_column_symbol_and_phone_choices(client):
             ).status_code
             == 422
         )
+
+
+def test_imputation_preview_approval_execution_export_and_original(client):
+    uploaded = upload(client, b"Amount,Category\n10,red\nNA,\n20,red\n")
+    fid = uploaded["file_id"]
+    suggestions = [
+        o for o in uploaded["plan"] if o["operation"] == "impute_missing_values"
+    ]
+    assert len(suggestions) == 2 and all(not o["enabled"] for o in suggestions)
+    assert uploaded["profile"]["columns"][0]["imputation"]["method"] == "mean"
+    operations = [
+        {
+            "id": "amount",
+            "column": "Amount",
+            "operation": "impute_missing_values",
+            "enabled": True,
+            "parameters": {"method": "mean", "confirmed": False},
+        },
+        {
+            "id": "category",
+            "column": "Category",
+            "operation": "impute_missing_values",
+            "enabled": True,
+            "parameters": {"method": "mode", "confirmed": False},
+        },
+    ]
+    body = {"operations": operations}
+    trial = client.post(f"/api/files/{fid}/preview-cleaning", json=body)
+    assert trial.status_code == 200, trial.text
+    assert trial.json()["after"]["rows"][1] == [15, "red"]
+    assert trial.json()["after"]["is_imputed"] == [
+        [False, False],
+        [True, True],
+        [False, False],
+    ]
+    assert trial.json()["validation"]["imputed_cells"] == 2
+    blocked = client.post(f"/api/files/{fid}/clean", json=body)
+    assert blocked.status_code == 422 and "Confirm imputation" in blocked.text
+    for operation in operations:
+        operation["parameters"]["confirmed"] = True
+    response = client.post(f"/api/files/{fid}/clean", json=body)
+    assert response.status_code == 202, response.text
+    job = response.json()["job_id"]
+    wait_job(client, job)
+    result = client.get(f"/api/jobs/{job}/results?page=2&page_size=1").json()
+    assert result["preview"]["is_imputed"] == [[True, True]]
+    assert result["validation"]["missing_after"] == 0
+    report = client.get(f"/api/jobs/{job}/download?format=report").json()
+    assert report["operations"][0]["imputed_cells"][0]["spreadsheet_row"] == 3
+    assert report["operations"][0]["distribution_before"]["numeric"]["mean"] == 15
+    assert report["operations"][1]["method"] == "mode"
+    csv = client.get(f"/api/jobs/{job}/download?format=csv").text
+    assert "15.0,red" in csv
+    workbook = load_workbook(
+        io.BytesIO(client.get(f"/api/jobs/{job}/download?format=xlsx").content)
+    )
+    assert workbook.active["A3"].value == 15
+    assert client.get(f"/api/files/{fid}/preview").json()["rows"][1] == ["NA", ""]
+    outsider = TestClient(app)
+    assert outsider.get(f"/api/jobs/{job}/results").status_code == 404
+    assert client.delete(f"/api/files/{fid}").status_code == 200
+
+
+def test_imputation_invalid_dependency_and_parameters_return_errors(client):
+    uploaded = upload(
+        client, b"Amount,Time\n10,05/10/2025\nNA,06/10/2025\n20,07/10/2025\n"
+    )
+    path = f"/api/files/{uploaded['file_id']}/preview-cleaning"
+    operation = {
+        "column": "Amount",
+        "operation": "impute_missing_values",
+        "enabled": True,
+        "parameters": {
+            "method": "linear_interpolation",
+            "order_by": "Time",
+            "single_entity": True,
+        },
+    }
+    response = client.post(path, json={"operations": [operation]})
+    assert (
+        response.status_code == 422 and "Approve safe date conversion" in response.text
+    )
+    operation["parameters"] = {"method": "group_mean"}
+    assert client.post(path, json={"operations": [operation]}).status_code == 422
+    operation["parameters"] = {"method": "knn"}
+    assert client.post(path, json={"operations": [operation]}).status_code == 422
+
+
+def test_imputation_provenance_survives_rename_and_duplicate_removal(client):
+    uploaded = upload(client, b"Amount,Group\n10,A\nNA,A\n10,A\n")
+    operations = [
+        {
+            "column": "Amount",
+            "operation": "impute_missing_values",
+            "enabled": True,
+            "parameters": {"method": "mean"},
+        },
+        {
+            "column": "Amount",
+            "operation": "rename_column",
+            "enabled": True,
+            "parameters": {"name": "Value"},
+        },
+        {"operation": "remove_duplicates", "enabled": True, "parameters": {}},
+    ]
+    data = client.post(
+        f"/api/files/{uploaded['file_id']}/preview-cleaning",
+        json={"operations": operations},
+    ).json()
+    assert data["after"]["columns"] == ["Value", "Group"]
+    # String observations remain strings; a numeric estimate is distinct without an approved conversion.
+    assert data["after"]["is_imputed"] == [[False, False], [True, False]]
+    operations[0]["parameters"]["method"] = "mode"
+    mode = client.post(
+        f"/api/files/{uploaded['file_id']}/preview-cleaning",
+        json={"operations": operations},
+    ).json()
+    # An identical copied mode is removed; the retained observed cell is not marked imputed.
+    assert mode["after"]["is_imputed"] == [[False, False]]

@@ -5,6 +5,7 @@ from pydantic import BaseModel, Field, model_validator
 
 from ..core.currency import CURRENCY_CODES
 from ..core.date_analyzer import is_valid_date
+from ..core.imputation import validate_parameters
 from ..core.phone import REGIONS
 
 
@@ -25,6 +26,7 @@ class Operation(BaseModel):
         "normalize_symbols",
         "remove_duplicates",
         "rename_column",
+        "impute_missing_values",
     ]
     parameters: dict[str, Any] = Field(default_factory=dict)
     enabled: bool = False
@@ -34,6 +36,8 @@ class Operation(BaseModel):
         if self.operation != "remove_duplicates" and not self.column:
             raise ValueError("This operation requires a column")
         settings = self.parameters
+        if self.operation == "impute_missing_values" and self.enabled:
+            validate_parameters(settings.get("method", "preserve"), settings)
         if self.operation == "normalize_capitalization" and settings.get(
             "strategy", "title"
         ) not in ("lower", "upper", "title"):

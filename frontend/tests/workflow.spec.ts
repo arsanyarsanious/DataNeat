@@ -377,15 +377,13 @@ test("simple add, remove, and no-change choices cover percentages, symbols, and 
   page,
 }) => {
   await page.goto("/");
-  await page
-    .getByLabel("Choose spreadsheet")
-    .setInputFiles({
-      name: "formats.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from(
-        "Rate,Amount,Phone,Weight\n10%,$100,+201001234567,10kg\n20,200 EUR,201001234567,20\n0.2,300,01001234567,30 kg\n",
-      ),
-    });
+  await page.getByLabel("Choose spreadsheet").setInputFiles({
+    name: "formats.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(
+      "Rate,Amount,Phone,Weight\n10%,$100,+201001234567,10kg\n20,200 EUR,201001234567,20\n0.2,300,01001234567,30 kg\n",
+    ),
+  });
   await expect(
     page
       .getByRole("region", { name: "Analysis for column Phone" })
@@ -484,15 +482,24 @@ test("simple add, remove, and no-change choices cover percentages, symbols, and 
   await page.getByRole("button", { name: "Delete file", exact: true }).click();
 });
 
-test("analysis sorting, privacy policy, and currency comma options", async ({ page }) => {
+test("analysis sorting, privacy policy, and currency comma options", async ({
+  page,
+}) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Privacy policy" })).toBeVisible();
+  await expect(
+    page.getByRole("heading", { name: "Privacy policy" }),
+  ).toBeVisible();
   await page.getByLabel("Choose spreadsheet").setInputFiles({
-    name: "sorting.csv", mimeType: "text/csv",
-    buffer: Buffer.from('Zulu,Amount,Alpha\n bad ,"$1,234.50", a \n good ,1234.50, b \n'),
+    name: "sorting.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(
+      'Zulu,Amount,Alpha\n bad ,"$1,234.50", a \n good ,1234.50, b \n',
+    ),
   });
-  await expect(page.getByRole("heading", { name: "Meet your data." })).toBeVisible();
-  const headings = page.locator('.column-analysis > .column-card h3');
+  await expect(
+    page.getByRole("heading", { name: "Meet your data." }),
+  ).toBeVisible();
+  const headings = page.locator(".column-analysis > .column-card h3");
   await expect(headings).toHaveText(["Alpha", "Amount", "Zulu"]);
   await page.getByLabel("Sort analysis columns").selectOption("position");
   await expect(headings).toHaveText(["Zulu", "Amount", "Alpha"]);
@@ -502,10 +509,135 @@ test("analysis sorting, privacy policy, and currency comma options", async ({ pa
   await page.getByLabel("Symbol action for Amount").selectOption("add");
   await page.getByLabel("Symbol for Amount").fill("$");
   await page.getByLabel("Currency commas for Amount").selectOption("add");
-  const operation = page.locator(".operation").filter({ has: page.getByLabel("Symbol action for Amount") });
+  const operation = page
+    .locator(".operation")
+    .filter({ has: page.getByLabel("Symbol action for Amount") });
   await operation.getByRole("checkbox").first().check();
   await page.getByRole("button", { name: "Preview changes" }).click();
-  await expect(page.getByRole("heading", { name: "After (preview)" })).toBeVisible();
-  const after = page.locator(".comparison .panel").filter({ has: page.getByRole("heading", { name: "After (preview)" }) });
-  await expect(after.getByRole("cell", { name: "$1,234.50", exact: true })).toHaveCount(2);
+  await expect(
+    page.getByRole("heading", { name: "After (preview)" }),
+  ).toBeVisible();
+  const after = page
+    .locator(".comparison .panel")
+    .filter({ has: page.getByRole("heading", { name: "After (preview)" }) });
+  await expect(
+    after.getByRole("cell", { name: "$1,234.50", exact: true }),
+  ).toHaveCount(2);
+});
+
+test("imputation selection, preview, per-column approval, validation and download", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page.getByLabel("Choose spreadsheet").setInputFiles({
+    name: "missing.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from("Amount,Category\n10,red\nNA,\n20,red\n"),
+  });
+  await page.getByRole("button", { name: "Review cleaning plan" }).click();
+  const amount = page
+    .locator(".operation")
+    .filter({ has: page.getByLabel("Imputation method for Amount") });
+  const category = page
+    .locator(".operation")
+    .filter({ has: page.getByLabel("Imputation method for Category") });
+  await expect(
+    amount.getByText("Suggested: Mean", { exact: true }),
+  ).toBeVisible();
+  await expect(page.getByLabel("Imputation method for Amount")).toHaveValue(
+    "preserve",
+  );
+  await amount.locator(".operation-check input").check();
+  await category.locator(".operation-check input").check();
+  await page.getByLabel("Imputation method for Amount").selectOption("mean");
+  await page.getByLabel("Imputation method for Category").selectOption("mode");
+  await expect(
+    page.getByRole("button", { name: "Apply cleaning" }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: "Preview changes" }).click();
+  const audit = page.getByRole("region", { name: "Imputation audit" });
+  await expect(audit).toContainText("1 cells imputed");
+  await expect(audit).toContainText("Remaining missing: 0");
+  await expect(
+    page.locator(".comparison td[data-is-imputed=true]"),
+  ).toHaveCount(2);
+  await page.getByLabel("Confirm imputation for Amount").check();
+  await expect(
+    page.getByRole("button", { name: "Apply cleaning" }),
+  ).toBeDisabled();
+  await page.getByLabel("Confirm imputation for Category").check();
+  await expect(
+    page.getByRole("button", { name: "Apply cleaning" }),
+  ).toBeEnabled();
+  // Changing a method invalidates the preview and both approvals.
+  await page.getByLabel("Imputation method for Amount").selectOption("median");
+  await expect(
+    page.getByRole("button", { name: "Apply cleaning" }),
+  ).toBeDisabled();
+  await expect(page.locator(".comparison")).toHaveCount(0);
+  await page.getByRole("button", { name: "Preview changes" }).click();
+  await expect(
+    page.getByLabel("Confirm imputation for Amount"),
+  ).not.toBeChecked();
+  await expect(
+    page.getByLabel("Confirm imputation for Category"),
+  ).not.toBeChecked();
+  await page.getByLabel("Confirm imputation for Amount").check();
+  await page.getByLabel("Confirm imputation for Category").check();
+  await page.getByRole("button", { name: "Apply cleaning" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Cleaning complete", exact: true }),
+  ).toBeVisible();
+  await expect(page.locator("td[data-is-imputed=true]")).toHaveCount(2);
+  await expect(
+    page.getByRole("region", { name: "Imputation audit" }),
+  ).toContainText("median");
+  const csvDownload = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Download CSV", exact: true }).click();
+  const csv = await csvDownload;
+  expect(await fs.readFile((await csv.path())!, "utf8")).toContain("15.0,red");
+  const reportDownload = page.waitForEvent("download");
+  await page.getByRole("link", { name: /report/i }).click();
+  const report = await reportDownload;
+  const data = JSON.parse(await fs.readFile((await report.path())!, "utf8"));
+  expect(data.validation.imputed_cells).toBe(2);
+  expect(
+    data.operations.find((o: { method?: string }) => o.method === "median")
+      .imputed_cells[0],
+  ).toMatchObject({ spreadsheet_row: 3, is_imputed: true });
+  await page.getByRole("button", { name: "Delete file", exact: true }).click();
+});
+
+test("grouped ordered imputation requires dependencies and stays within entities", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .getByLabel("Choose spreadsheet")
+    .setInputFiles("../sample_data/missing_measurements.csv");
+  await page.getByRole("button", { name: "Review cleaning plan" }).click();
+  await page
+    .getByLabel("Imputation method for Reading")
+    .selectOption("group_forward_fill");
+  const operation = page
+    .locator(".operation")
+    .filter({ has: page.getByLabel("Imputation method for Reading") });
+  await operation.locator(".operation-check input").check();
+  await page.getByRole("button", { name: "Preview changes" }).click();
+  await expect(page.locator(".error[role=alert]")).toContainText(
+    "grouped method requires grouping columns",
+  );
+  await page.getByLabel("Group Reading by Entity").check();
+  await page.getByLabel("Imputation order for Reading").selectOption("Time");
+  await page.getByRole("button", { name: "Preview changes" }).click();
+  await expect(
+    page.getByRole("region", { name: "Imputation audit" }),
+  ).toContainText("Grouping: Entity · Ordering: Time");
+  await expect(page.locator(".comparison td[data-is-imputed=true]")).toHaveText(
+    ["Estimated10", "Estimated100"],
+  );
+  await expect(
+    page.getByRole("button", { name: "Apply cleaning" }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: "Delete file", exact: true }).click();
 });

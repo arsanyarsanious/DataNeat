@@ -1,3 +1,36 @@
+export type Distribution = {
+  numeric: {
+    mean: number | null;
+    median: number | null;
+    std: number | null;
+    skewness: number | null;
+    outlier_count: number;
+  } | null;
+  frequencies: { value: string; count: number }[];
+  observed_count: number;
+  distinct_categories: number;
+};
+export type ImputationRecommendation = {
+  available_methods: string[];
+  method: string;
+  explanation: string;
+  warnings: string[];
+  statistics: Distribution;
+  missing_pattern: {
+    missing_runs: number;
+    longest_run: number;
+    leading_missing: number;
+    trailing_missing: number;
+    example_spreadsheet_rows: number[];
+  };
+  conditional_suggestions: string[];
+  contextual_recommendations?: {
+    method: string;
+    group_by?: string[];
+    order_by?: string;
+    explanation: string;
+  }[];
+};
 export type Issue = {
   issue: string;
   column: string;
@@ -30,6 +63,7 @@ export type Column = {
   sample_values: unknown[];
   issues: Issue[];
   date_analysis?: DateAnalysis;
+  imputation?: ImputationRecommendation;
 };
 export type Profile = {
   rows: number;
@@ -40,6 +74,7 @@ export type Profile = {
   columns: Column[];
 };
 export type Preview = {
+  is_imputed?: boolean[][];
   columns: string[];
   rows: unknown[][];
   total_rows: number;
@@ -57,6 +92,7 @@ export type Operation = {
   safety: "safe" | "review" | "destructive";
   requires_confirmation: boolean;
   enabled: boolean;
+  recommendation?: ImputationRecommendation;
 };
 export type Upload = {
   file_id: string;
@@ -73,6 +109,21 @@ export type Upload = {
   plan: Operation[];
 };
 export type Log = {
+  method?: string;
+  missing_before?: number;
+  missing_after?: number;
+  imputed_count?: number;
+  group_by?: string[];
+  order_by?: string;
+  warnings?: string[];
+  failures?: string[];
+  distribution_before?: Distribution;
+  distribution_after?: Distribution;
+  imputed_cells?: {
+    row_index: number;
+    spreadsheet_row: number;
+    is_imputed: boolean;
+  }[];
   id: string;
   operation: string;
   column: string | null;
@@ -82,6 +133,8 @@ export type Log = {
   status: string;
 };
 export type Validation = {
+  imputed_cells: number;
+  imputation: Log[];
   rows_before: number;
   rows_after: number;
   missing_before: number;

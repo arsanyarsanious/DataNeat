@@ -221,7 +221,7 @@ Run exactly one backend worker. Scaling to multiple processes requires shared jo
 
 Parsing, profiling, previews of cleaning, and validation are bounded but operate in memory. Expensive cleaning runs in the background; initial upload analysis awaits a threadpool result. Near-limit or highly irregular spreadsheets can still need substantial memory. There is no large-file benchmarking claim.
 
-Only the selected worksheet is exported. Workbook styles, merged cells, charts, macros, formula evaluation, and arbitrary Excel display formats are not preserved. Formulas are treated as untrusted text and escaped on export. Date support is intentionally limited to the documented formats, ISO datetimes, and English month names. Ambiguous date confirmation applies to the entire selected column; inspect mixed-origin columns before approving it. Unsupported numeric locales remain unchanged; supported ISO currency codes and symbols can be standardized after explicit approval, but there is no currency conversion or automatic missing-value imputation. Type detection is heuristic, and unmatched or unusual formats may need manual correction outside this MVP.
+Only the selected worksheet is exported. Workbook styles, merged cells, charts, macros, formula evaluation, and arbitrary Excel display formats are not preserved. Formulas are treated as untrusted text and escaped on export. Date support is intentionally limited to the documented formats, ISO datetimes, and English month names. Ambiguous date confirmation applies to the entire selected column; inspect mixed-origin columns before approving it. Unsupported numeric locales remain unchanged; supported ISO currency codes and symbols can be standardized after explicit approval, but there is no currency conversion, and missing-value imputation is available only after explicit review and approval. Type detection is heuristic, and unmatched or unusual formats may need manual correction outside this MVP.
 
 ## Recommended next improvements
 
@@ -233,3 +233,57 @@ Only the selected worksheet is exported. Workbook styles, merged cells, charts, 
 Analysis display options let you sort issue columns by name (A–Z), original spreadsheet position (left to right), or reverse position. Healthy columns remain in their separate expandable section and follow the same ordering. These display options do not reorder exported data.
 
 For currency columns, choose **Add the chosen symbol to all numbers** or **Remove all symbols / labels**, then choose whether to include thousands-separator commas. All recognized amounts receive the selected format; decimal digits are retained without rounding or currency conversion. **No change** preserves the original values. Missing and unsupported values remain unchanged. The in-app privacy policy explains processing location, session access, deletion, retention, and the absence of third-party data sharing or AI services in the current application.
+
+
+## Missing-data imputation
+
+DataNeat offers opt-in **mean, median, mode, constant, forward fill, backward fill, and linear interpolation**, plus **group mean, group median, group mode, group forward fill, and group backward fill**. No imputation is selected or applied automatically. KNN and regression are not implemented; the current feature does not introduce external AI services, predictive features, or scikit-learn dependencies.
+
+### Review workflow
+
+1. Upload a spreadsheet (try `sample_data/missing_measurements.csv`) and open **Review cleaning plan**.
+2. Each column with missing cells has an **Imputation** action with its type, missing count/percentage, distribution evidence, available methods, and a suggested method. Numeric suggestions use skewness and IQR outlier evidence; categorical suggestions use observed frequencies. Repeated labels and ordering columns yield conditional grouping/time-series suggestions. These are assumptions to review, not evidence that missingness is random.
+3. Enable only the imputation actions you want and choose a method. For a constant, enter a non-missing value; `0` is allowed when it actually means zero. Identifiers are excluded from arithmetic methods. Mode ties use the first observed value deterministically.
+4. Select entity grouping columns for grouped or sequential data. Ordered methods require an explicit ordering column; without grouping, explicitly confirm that all rows form one related sequence. For the example file, select `Entity` and order by `Time`.
+5. Approve any necessary marker normalization, type/date conversion, and formatting actions. With active imputation, the engine runs approved marker normalization first, then whitespace and type/date conversions, formatting, imputation, duplicate removal, and renaming. It validates dependencies against the resulting data, independently of submitted action order. Refer to original column names when imputation is active, since renaming runs last. Plans without active imputation retain their existing execution order. Custom missing markers must be explicitly normalized before they can be imputed.
+6. Click **Preview changes**. Highlighted cells are estimates; the imputation audit reports actual filled cells, remaining missing values, method, grouping/ordering, warnings, and before/after numeric statistics and category frequencies. Other cleaning actions may also change observed cells if separately approved; imputation itself never overwrites non-missing cells.
+7. Confirm each selected column after reviewing its preview, then **Apply cleaning**. Any configuration/action change invalidates the preview and confirmations. Selecting all cleaning actions does not approve estimates. The clean API also requires explicit imputation confirmation.
+8. Download CSV/XLSX and the JSON report. Exported data retains its column layout; the report includes original `row_index`, `spreadsheet_row` (header is row 1), and `is_imputed: true` per filled cell. Preview highlighting follows retained original row identities through pagination, duplicate removal, and renaming.
+
+### Safeguards and limits
+
+- Numeric methods require every observed target value to be a finite plain number and the target to be a numeric measurement. Unsupported mixed values, ambiguous currency/percentage units, booleans, and identifiers block arithmetic rather than being silently coerced. Review safe conversions first. Arbitrary numeric locales are not supported.
+- Ordering must be complete and unique within each group and use finite numeric coordinates or valid ISO dates/timestamps. Ambiguous or invalid date ordering blocks the operation until safely corrected/converted. Interpolation uses actual numeric/time spacing, not row positions, and requires at least two observations.
+- Calculations sort temporarily in ascending coordinate order; original spreadsheet order is preserved. Directional fill and interpolation fill interior gaps only: no leading/trailing extrapolation is supported. No sequence fill crosses group boundaries. Missing group keys and groups without sufficient observations remain missing, with warnings.
+- An entirely missing column has no data-driven estimate; the UI offers a user-defined constant or no change. Statistical methods invoked through the API leave groups/columns without observations unfilled. Empty frames are handled safely.
+- Mean imputation can reduce variance and distort correlations; median/mode can distort distributions. Directional fills assume continuity within related entities; backward fill can leak future information. These estimates are not verified facts and should not replace domain judgment. No predictive/model-based methods are available in this implementation.
+- A validation failure blocks the operation with a column-specific explanation. Preview errors return HTTP 422; jobs that fail expose the explanation in job status. No partial cleaned export is published, and the original upload remains intact.
+- Counts/distribution audits describe each imputation operation before any later approved duplicate removal. The cell flags in the preview identify only retained rows. Frequency samples show the ten most frequent observed values; cross-column missing-pattern reports show up to twenty patterns.
+
+### Imputation API
+
+Use the existing session-scoped endpoints; no additional upload or job flow is required:
+
+```json
+{
+  "operations": [
+    {
+      "id": "impute-reading",
+      "column": "Reading",
+      "operation": "impute_missing_values",
+      "enabled": true,
+      "parameters": {
+        "method": "linear_interpolation",
+        "group_by": ["Entity"],
+        "order_by": "Time",
+        "single_entity": false,
+        "confirmed": false
+      }
+    }
+  ]
+}
+```
+
+Send this body to `POST /api/files/{file_id}/preview-cleaning`. After reviewing the response, set `confirmed: true` and send it to `POST /api/files/{file_id}/clean`. For statistical/group methods omit `order_by`; for `constant` provide `value`. `group_by` accepts up to five distinct columns; ordered methods require grouping or `single_entity: true`. Supported method identifiers are `preserve`, `mean`, `median`, `mode`, `constant`, `forward_fill`, `backward_fill`, `linear_interpolation`, `group_mean`, `group_median`, `group_mode`, `group_forward_fill`, and `group_backward_fill`.
+
+Profiles now include per-column `statistics`, `missing_pattern`, and (for columns with gaps) `imputation` recommendations; dataset profiles include `missing_patterns`. Preview/result tables include an aligned boolean `is_imputed` matrix. Operation logs and downloadable reports include `method`, `missing_before`, `missing_after`, `imputed_count`, `imputed_cells`, `group_by`, `order_by`, `warnings`, `failures`, `distribution_before`, and `distribution_after`. Validation exposes total `imputed_cells` and the per-operation `imputation` audit. `GET /api/jobs/{job_id}/results` and download endpoints retain existing session access checks.
