@@ -1,3 +1,5 @@
+"use client";
+import { useState } from "react";
 import { CheckCheck, AlertTriangle } from "lucide-react";
 import type { Column } from "@/lib/types";
 const names: Record<string, string> = {
@@ -20,9 +22,10 @@ export function ColumnAnalysis({
   columns: Column[];
   compact?: boolean;
 }) {
-  const sorted = [...columns].sort((a, b) =>
-    a.column_name.localeCompare(b.column_name, undefined, { numeric: true }),
-  );
+  const [order, setOrder] = useState("alphabetical");
+  const sorted = order === "alphabetical"
+    ? [...columns].sort((a, b) => a.column_name.localeCompare(b.column_name, undefined, { numeric: true }))
+    : order === "reverse" ? [...columns].reverse() : [...columns];
   const problem = sorted.filter((c) => c.issues.length),
     healthy = sorted.filter((c) => !c.issues.length);
   function renderColumn(c: Column) {
@@ -132,9 +135,9 @@ export function ColumnAnalysis({
             {issue.issue === "currency_inconsistency" && (
               <>
                 <p>
-                  Some amounts use currency labels or different notation. Choose
-                  the intended currency and explicitly approve any bare amounts;
-                  other currencies will stay unchanged.
+                  Some amounts use different currency labels or comma formatting.
+                  Choose whether to include a currency symbol and thousands
+                  separators for all recognized amounts in the cleaning plan.
                 </p>
                 <div className="format-chips">
                   {Object.entries(issue.formats || {}).map(
@@ -187,10 +190,17 @@ export function ColumnAnalysis({
       <div className="analysis-section-heading">
         <h2>{compact ? "Remaining issues by column" : "Issues by column"}</h2>
         <p>
-          {problem.length} columns need attention. Columns are listed
-          alphabetically.
+          {problem.length} columns need attention.
         </p>
       </div>
+      <label className="setting">
+        Sort columns
+        <select aria-label="Sort analysis columns" value={order} onChange={(e) => setOrder(e.target.value)}>
+          <option value="alphabetical">Column name (A–Z)</option>
+          <option value="position">Column position (left to right)</option>
+          <option value="reverse">Column position (right to left)</option>
+        </select>
+      </label>
       {problem.length ? (
         problem.map(renderColumn)
       ) : (

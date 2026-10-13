@@ -42,3 +42,11 @@ Backend suite: **49 passed**. Production browser suite: **7 passed**, including 
 ## Literal notation and phone formatting — 2026-10-13
 
 Backend suite: **61 passed**, including full-column add/remove/no-change behavior, unchanged numeric scale, zero-padded numeric text, arbitrary short unit labels, phone detection and mixed prefix reports, international and national formatting, meaningful leading zeros, preservation of explicit foreign country codes, Italian local numbers beginning with 39, formula-safe phone reimport, invalid parameters, and original-upload preservation. `phonenumbers==9.0.41` is pinned in both dependency files and works offline; the frozen Python install succeeded. The updated browser suite has **8 workflows** covering the simple controls, advanced-mode compatibility, preview, country selection, all-row prefix consistency, CSV downloads, and existing regression workflows. Final production run: **all 8 browser workflows passed** against `next start` and the updated backend. Production build, TypeScript, source checks, and proxied API health passed. These fixes were verified with native production servers; Docker images were not rebuilt during this turn. The existing Docker installation uses the updated frozen dependency file.
+
+### Analysis display, privacy, and uniform currency formatting — 2026-10-13
+
+- Backend: 62 tests passed, including consistent symbol/comma formatting and detection of mixed comma notation.
+- Production Next.js build and TypeScript check passed.
+- Browser: all 9 Playwright workflows passed against native production servers; the new workflow checks original/reverse/alphabetical analysis order, the privacy section, and both formatted currency rows in the preview.
+- Both direct backend and frontend-proxied health requests returned OK. Docker images were not rebuilt for this change.
+- The first browser run rejected uploads because the manually restarted backend lacked the test origin in CORS_ORIGINS. Restoring the documented localhost and 127.0.0.1 origins resolved this configuration issue; the complete rerun passed.

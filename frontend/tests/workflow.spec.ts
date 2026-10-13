@@ -483,3 +483,29 @@ test("simple add, remove, and no-change choices cover percentages, symbols, and 
   expect(text).toContain("20,200,201001234567,20");
   await page.getByRole("button", { name: "Delete file", exact: true }).click();
 });
+
+test("analysis sorting, privacy policy, and currency comma options", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Privacy policy" })).toBeVisible();
+  await page.getByLabel("Choose spreadsheet").setInputFiles({
+    name: "sorting.csv", mimeType: "text/csv",
+    buffer: Buffer.from('Zulu,Amount,Alpha\n bad ,"$1,234.50", a \n good ,1234.50, b \n'),
+  });
+  await expect(page.getByRole("heading", { name: "Meet your data." })).toBeVisible();
+  const headings = page.locator('.column-analysis > .column-card h3');
+  await expect(headings).toHaveText(["Alpha", "Amount", "Zulu"]);
+  await page.getByLabel("Sort analysis columns").selectOption("position");
+  await expect(headings).toHaveText(["Zulu", "Amount", "Alpha"]);
+  await page.getByLabel("Sort analysis columns").selectOption("reverse");
+  await expect(headings).toHaveText(["Alpha", "Amount", "Zulu"]);
+  await page.getByRole("button", { name: "Review cleaning plan" }).click();
+  await page.getByLabel("Symbol action for Amount").selectOption("add");
+  await page.getByLabel("Symbol for Amount").fill("$");
+  await page.getByLabel("Currency commas for Amount").selectOption("add");
+  const operation = page.locator(".operation").filter({ has: page.getByLabel("Symbol action for Amount") });
+  await operation.getByRole("checkbox").first().check();
+  await page.getByRole("button", { name: "Preview changes" }).click();
+  await expect(page.getByRole("heading", { name: "After (preview)" })).toBeVisible();
+  const after = page.locator(".comparison .panel").filter({ has: page.getByRole("heading", { name: "After (preview)" }) });
+  await expect(after.getByRole("cell", { name: "$1,234.50", exact: true })).toHaveCount(2);
+});
