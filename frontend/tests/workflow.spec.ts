@@ -642,18 +642,93 @@ test("grouped ordered imputation requires dependencies and stays within entities
   await page.getByRole("button", { name: "Delete file", exact: true }).click();
 });
 
-test("currency salary offers mean and median after approved numeric formatting", async ({ page }) => {
+test("currency salary offers mean and median after approved numeric formatting", async ({
+  page,
+}) => {
   await page.goto("/");
-  await page.getByLabel("Choose spreadsheet").setInputFiles({ name: "salary.csv", mimeType: "text/csv", buffer: Buffer.from("Salary\n$1000\nNA\n$3000\n") });
+  await page.getByLabel("Choose spreadsheet").setInputFiles({
+    name: "salary.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from("Salary\n$1000\nNA\n$3000\n"),
+  });
   await page.getByRole("button", { name: "Review cleaning plan" }).click();
   const method = page.getByLabel("Imputation method for Salary");
   await expect(method.locator('option[value="mean"]')).toHaveCount(1);
   await expect(method.locator('option[value="median"]')).toHaveCount(1);
   await method.selectOption("mean");
-  await page.locator(".operation").filter({ has: method }).locator(".operation-check input").check();
+  await page
+    .locator(".operation")
+    .filter({ has: method })
+    .locator(".operation-check input")
+    .check();
   await page.getByLabel("Symbol action for Salary").selectOption("remove");
-  await page.locator(".operation").filter({ has: page.getByLabel("Symbol action for Salary") }).locator(".operation-check input").check();
+  await page
+    .locator(".operation")
+    .filter({ has: page.getByLabel("Symbol action for Salary") })
+    .locator(".operation-check input")
+    .check();
   await page.getByRole("button", { name: "Preview changes" }).click();
-  await expect(page.locator(".comparison td[data-is-imputed=true]")).toContainText("2000");
+  await expect(
+    page.locator(".comparison td[data-is-imputed=true]"),
+  ).toContainText("2000");
+  await page.getByRole("button", { name: "Delete file", exact: true }).click();
+});
+
+test("interactive spreadsheet basic cleanup, colored hover issues, confirmed fixes and export", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await page
+    .getByText("Interactive spreadsheet: basic cleanup first", { exact: false })
+    .click();
+  await page.getByLabel("Choose spreadsheet").setInputFiles({
+    name: "interactive.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(
+      "Customer_ID,Name,Birth_Date,Salary,Email\n001, mary david ,2025-01-02,$100,bad-email\n002,MARY DAVID,05/10/2025,200,mary@example.com\n003,Other,88-99-2089,NA,other@example.com\n",
+    ),
+  });
+  await expect(
+    page.getByRole("heading", { name: "Your interactive spreadsheet." }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("cell", { name: "Mary David", exact: true }),
+  ).toHaveCount(2);
+  const cell = page.getByRole("button", { name: /Issues in Birth_Date row 4/ });
+  await cell.hover();
+  const dialog = page.getByRole("dialog", { name: "Fix Birth_Date row 4" });
+  await expect(dialog).toBeVisible();
+  await dialog.getByLabel("Corrected cell value").fill("2025-10-06");
+  await dialog.getByRole("button", { name: "Preview fix" }).click();
+  await expect(dialog).toContainText("1 cells / rows would change");
+  await expect(cell).toContainText("88-99-2089");
+  await dialog.getByRole("button", { name: "Confirm and apply" }).click();
+  await expect(cell).toHaveCount(0);
+  await expect(
+    page.getByRole("cell", { name: "2025-10-06", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: /Issues in Email row 2/ }).click();
+  await page.getByLabel("Corrected cell value").fill("mary@example.com");
+  await page.getByRole("button", { name: "Preview fix" }).click();
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: /Issues in Email row 2/ }),
+  ).toContainText("bad-email");
+  await page.keyboard.press("Escape");
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole("button", { name: /Issues in Salary row 4/ }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
+  await page.keyboard.press("Escape");
+  const downloaded = page.waitForEvent("download");
+  await page.getByRole("link", { name: "Download CSV", exact: true }).click();
+  const download = await downloaded;
+  expect(await fs.readFile((await download.path())!, "utf8")).toContain(
+    "2025-10-06",
+  );
   await page.getByRole("button", { name: "Delete file", exact: true }).click();
 });

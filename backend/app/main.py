@@ -19,9 +19,10 @@ from .core.cleaning_plan import generate_cleaning_plan
 from .core.common import missing, scalar
 from .core.date_analyzer import is_valid_date
 from .core.file_parser import parse_file
+from .core.interactive import annotate, basic_cleanup, propose
 from .core.profiler import profile_dataframe
 from .core.validator import validate_cleaning
-from .models.requests import CleaningRequest
+from .models.requests import CleaningRequest, EditorRequest
 from .services.limits import BodyLimitMiddleware
 from .services.storage import Store
 
@@ -418,3 +419,125 @@ def download(
 def delete(file_id: str, request: Request):
     store.delete(file_id, request.state.session)
     return {"deleted": True}
+
+
+def editor_response(record, page=1, page_size=25):
+    df = record["editor_df"]
+    report = record["editor_profile"]
+    page = min(page, max(1, (len(df) + page_size - 1) // page_size))
+    data = preview(df, page, page_size)
+    data["row_indices"] = [
+        int(i) for i in df.iloc[(page - 1) * page_size : page * page_size].index
+    ]
+    data["cell_issues"] = annotate(
+        df, report, df.iloc[(page - 1) * page_size : page * page_size]
+    )
+    return {
+        "preview": data,
+        "profile": report,
+        "revision": record["editor_revision"],
+        "basic_log": record["editor_basic_log"],
+        "changes": record.get("editor_changes", []),
+    }
+
+
+@app.post("/api/files/{file_id}/editor/start")
+def start_editor(file_id: str, request: Request):
+    with store.lock:
+        record = file_record(file_id, request)
+        if "editor_df" not in record:
+            cleaned, logs = basic_cleanup(record["df"])
+            record.update(
+                editor_df=cleaned,
+                editor_profile=profile_dataframe(cleaned),
+                editor_revision=0,
+                editor_basic_log=logs,
+                editor_changes=[],
+            )
+            store.save(record)
+        return editor_response(record)
+
+
+@app.get("/api/files/{file_id}/editor")
+def get_editor(
+    file_id: str,
+    request: Request,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+):
+    record = file_record(file_id, request)
+    if "editor_df" not in record:
+        raise HTTPException(409, "Start interactive cleaning first")
+    return editor_response(record, page, page_size)
+
+
+@app.post("/api/files/{file_id}/editor/fix")
+def editor_fix(file_id: str, body: EditorRequest, request: Request):
+    with store.lock:
+        record = file_record(file_id, request)
+        if "editor_df" not in record:
+            raise HTTPException(409, "Start interactive cleaning first")
+        if record["editor_revision"] != body.revision:
+            raise HTTPException(
+                409, "The sheet changed. Reload it and preview the fix again."
+            )
+        result, detail = propose(record["editor_df"], body)
+        if not body.confirmed:
+            return {"proposal": detail, "revision": record["editor_revision"]}
+        record.update(
+            editor_df=result,
+            editor_profile=profile_dataframe(result),
+            editor_revision=record["editor_revision"] + 1,
+        )
+        record["editor_changes"].append(
+            {
+                "action": body.action,
+                "column": body.column,
+                "scope": body.scope,
+                "row_index": body.row_index,
+                "parameters": body.parameters,
+                **detail,
+            }
+        )
+        store.save(record)
+        return {"proposal": detail, "revision": record["editor_revision"]}
+
+
+@app.get("/api/files/{file_id}/editor/download")
+def editor_download(
+    file_id: str,
+    request: Request,
+    format: str = Query("xlsx", pattern="^(csv|xlsx|report)$"),
+):
+    record = file_record(file_id, request)
+    if "editor_df" not in record:
+        raise HTTPException(409, "Start interactive cleaning first")
+    if format == "report":
+        return JSONResponse(
+            {
+                "basic_cleanup": record["editor_basic_log"],
+                "confirmed_changes": record["editor_changes"],
+                "revision": record["editor_revision"],
+                "remaining_profile": record["editor_profile"],
+            },
+            headers={
+                "Content-Disposition": 'attachment; filename="dataneat-interactive-report.json"'
+            },
+        )
+    df = record["editor_df"].map(safe_export)
+    df.columns = [safe_export(str(c)) for c in df.columns]
+    buffer = io.BytesIO()
+    if format == "csv":
+        buffer.write(df.to_csv(index=False).encode("utf-8-sig"))
+    else:
+        df.to_excel(buffer, index=False, engine="openpyxl")
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer,
+        media_type="text/csv"
+        if format == "csv"
+        else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="dataneat-interactive.{format}"'
+        },
+    )
