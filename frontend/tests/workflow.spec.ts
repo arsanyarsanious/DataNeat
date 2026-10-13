@@ -641,3 +641,19 @@ test("grouped ordered imputation requires dependencies and stays within entities
   ).toBeDisabled();
   await page.getByRole("button", { name: "Delete file", exact: true }).click();
 });
+
+test("currency salary offers mean and median after approved numeric formatting", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("Choose spreadsheet").setInputFiles({ name: "salary.csv", mimeType: "text/csv", buffer: Buffer.from("Salary\n$1000\nNA\n$3000\n") });
+  await page.getByRole("button", { name: "Review cleaning plan" }).click();
+  const method = page.getByLabel("Imputation method for Salary");
+  await expect(method.locator('option[value="mean"]')).toHaveCount(1);
+  await expect(method.locator('option[value="median"]')).toHaveCount(1);
+  await method.selectOption("mean");
+  await page.locator(".operation").filter({ has: method }).locator(".operation-check input").check();
+  await page.getByLabel("Symbol action for Salary").selectOption("remove");
+  await page.locator(".operation").filter({ has: page.getByLabel("Symbol action for Salary") }).locator(".operation-check input").check();
+  await page.getByRole("button", { name: "Preview changes" }).click();
+  await expect(page.locator(".comparison td[data-is-imputed=true]")).toContainText("2000");
+  await page.getByRole("button", { name: "Delete file", exact: true }).click();
+});

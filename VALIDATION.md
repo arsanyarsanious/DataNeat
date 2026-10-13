@@ -59,3 +59,8 @@ Backend suite: **61 passed**, including full-column add/remove/no-change behavio
 - Ruff F/I checks and Git whitespace checks passed. Backend health on port 8000 and frontend-proxied health on port 3000 returned OK.
 - A test locator was corrected to distinguish the application error alert from Next.js's route announcer. Rapid repeated suites hit the unchanged 120-request/minute limit; a fresh backend run passed the entire browser suite. No rate-limit safeguards were disabled.
 - KNN/regression remain optional future work; no scikit-learn or external service was added. Directional fills/interpolation intentionally leave leading/trailing gaps, missing group keys, and insufficient-observation groups unfilled. Docker images were not rebuilt for this feature; native production behavior was validated.
+
+### Salary arithmetic choices — 2026-10-13
+
+- Numeric imputation choices are now exposed for currency/unit and salary-like text columns, with explicit conversion/marker warnings. Identifiers, phones, booleans, and date targets remain protected. Runtime parsing still rejects unresolved labels or unsupported values.
+- 125 backend tests and all 12 production browser workflows passed, including currency Salary mean/median visibility and a mean preview after approved symbol removal. TypeScript and Ruff F/I checks passed. This change affects backend recommendation/validation logic; frontend application source and dependencies did not change.
