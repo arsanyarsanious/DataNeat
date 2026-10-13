@@ -42,3 +42,7 @@ Create/sign in to Render using GitHub and authorize repository access. Add a Ren
 6. Confirm both services use the Free plan and no paid disk/database was created.
 
 This is a demo configuration, not production hosting for confidential datasets. Free services can sleep when idle, share monthly usage allowances, and have ephemeral storage. Exact current restrictions must be confirmed in the provider dashboard. A public frontend URL exists only after the actual deployment succeeds; the Codex cloud localhost URLs are not public hosting.
+
+## Backend for the published Cloudflare frontend
+
+The root `render.yaml` now describes a Free Docker backend with secure cookies, a 5 MB upload cap, and CORS for `https://dataneat.dataneat-9df71239.workers.dev`. It is a prepared blueprint, not an already created Render service. Once the backend's real HTTPS URL is allocated and its deployment is live, update the Cloudflare Worker with `BACKEND_ORIGIN` set to that origin and redeploy. Verify health, upload, cleaning, and download through the Cloudflare frontend. The network draft includes the frontend hostname for those live checks.
