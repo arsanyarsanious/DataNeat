@@ -128,6 +128,28 @@ def missing_pattern(series):
     }
 
 
+def numeric_candidate(series, kind):
+    if kind in ("identifier", "phone", "boolean", "date", "datetime"):
+        return False
+    if kind in ("integer", "decimal", "currency", "number_with_symbol"):
+        return True
+    if re.search(
+        r"salary|wage|amount|price|cost|income|revenue|balance",
+        str(series.name),
+        re.IGNORECASE,
+    ):
+        return True
+    values = [v for v in series if not missing(v)]
+    valid = 0
+    for value in values:
+        try:
+            number(value)
+            valid += 1
+        except ValueError:
+            pass
+    return bool(values and valid >= len(values) / 2)
+
+
 def recommendation(series, kind):
     stats = distribution(series)
     available = [
@@ -140,7 +162,7 @@ def recommendation(series, kind):
         "group_forward_fill",
         "group_backward_fill",
     ]
-    if kind in ("integer", "decimal") and stats["numeric"]:
+    if numeric_candidate(series, kind) and stats["numeric"]:
         available += [
             "mean",
             "median",
@@ -170,7 +192,11 @@ def recommendation(series, kind):
             "mode",
             "The most frequent observed value may be useful when one category is representative; otherwise choose a meaningful constant or leave missing values.",
         )
-    if kind in ("integer", "decimal") and not stats["numeric"]:
+    if (
+        stats["observed_count"]
+        and numeric_candidate(series, kind)
+        and not stats["numeric"]
+    ):
         available += [
             "mean",
             "median",
@@ -179,7 +205,7 @@ def recommendation(series, kind):
             "linear_interpolation",
         ]
         method = "constant"
-        reason = "Some observed values are not plain finite numbers. Numeric methods are blocked until approved marker normalization or safe formatting conversions resolve them. Otherwise use a meaningful constant or leave gaps."
+        reason = "Mean and median are available for this amount column, but some observed values are not plain finite numbers. Approve missing-marker normalization for placeholders and remove currency/unit labels using the formatting controls before numeric imputation. No currency conversion is performed; only combine amounts known to use the same unit. Unsupported values block the operation rather than being ignored."
     return {
         "available_methods": available,
         "method": method,
@@ -357,7 +383,19 @@ def impute_missing_values(df, column, method, parameters):
     ]
     kind = detect_column_type(original)["type"]
     if method in NUMERIC:
-        if not mask.all() and kind not in ("integer", "decimal"):
+        if not mask.all() and (
+            kind
+            in (
+                "identifier",
+                "phone",
+                "boolean",
+                "date",
+                "datetime",
+                "currency",
+                "number_with_symbol",
+            )
+            or not numeric_candidate(original, kind)
+        ):
             raise ValueError(
                 "Numeric imputation is limited to numeric measurements, not identifiers, currency labels, percentages, or mixed types. Review conversions first."
             )

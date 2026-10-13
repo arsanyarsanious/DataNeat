@@ -380,3 +380,47 @@ def test_existing_rename_then_transform_order_is_preserved_without_imputation():
     ]
     result, _ = apply_cleaning_plan(df, operations)
     assert result.loc[0, "Label"] == "value"
+
+
+def test_salary_currency_exposes_numeric_methods_and_requires_conversion():
+    df = pd.DataFrame({"Salary": ["$1,000", None, "$3,000"]}, dtype=object)
+    report = profile_dataframe(df)["columns"][0]
+    assert report["detected_type"] == "currency"
+    assert {"mean", "median", "group_mean", "group_median"}.issubset(
+        report["imputation"]["available_methods"]
+    )
+    with pytest.raises(ValueError):
+        impute_missing_values(df, "Salary", "mean", {})
+    operations = [
+        {
+            "column": "Salary",
+            "operation": "impute_missing_values",
+            "enabled": True,
+            "parameters": {"method": "mean", "confirmed": True},
+        },
+        {
+            "column": "Salary",
+            "operation": "normalize_currency",
+            "enabled": True,
+            "parameters": {"action": "remove"},
+        },
+    ]
+    cleaned, logs = apply_cleaning_plan(df, operations)
+    assert cleaned["Salary"].tolist() == ["1000", 2000, "3000"]
+    assert logs[-1]["imputed_count"] == 1
+
+
+def test_categorical_salary_still_offers_arithmetic_with_dependency_warning():
+    df = pd.DataFrame({"Salary": ["1000", "Unknown", "Unknown", None]}, dtype=object)
+    report = profile_dataframe(df)["columns"][0]
+    assert "mean" in report["imputation"]["available_methods"]
+    assert "median" in report["imputation"]["available_methods"]
+    with pytest.raises(ValueError):
+        impute_missing_values(df, "Salary", "median", {})
+    protected = pd.DataFrame({"Salary_ID": ["001", None, "002"]})
+    assert (
+        "mean"
+        not in profile_dataframe(protected)["columns"][0]["imputation"][
+            "available_methods"
+        ]
+    )
