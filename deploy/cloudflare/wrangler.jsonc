@@ -1,0 +1,12 @@
+{
+  "$schema": "https://raw.githubusercontent.com/cloudflare/workers-sdk/main/packages/wrangler/config-schema.json",
+  "name": "dataneat",
+  "main": "worker.mjs",
+  "compatibility_date": "2025-04-01",
+  "workers_dev": true,
+  "assets": {
+    "directory": "../../frontend/out",
+    "binding": "ASSETS",
+    "run_worker_first": true,
+  },
+}

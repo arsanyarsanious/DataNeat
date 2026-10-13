@@ -80,3 +80,11 @@ Backend suite: **61 passed**, including full-column add/remove/no-change behavio
 - Frontend: production build/TypeScript checks and all 13 Playwright workflows passed. The new workflow covers upload-mode selection, basic cleanup, hover annotations, preview without mutation, confirmed correction, canceled correction, mobile layout, and download. An initial locator was corrected to account for accessible issue-button names inside cells; assertions now check the actual cell text before confirmation.
 - Desktop dark-mode and mobile panel screenshots were inspected. Mobile document width equals its 390 px viewport. Backend and frontend-proxied health requests returned OK. Ruff F/I and Git whitespace checks passed.
 - Docker images were not rebuilt in cloud. This is a paginated data preview rather than native Excel embedding; existing selected-worksheet/style/macro limitations remain. Advanced sequence/model imputation uses the existing cleaning-plan interface; editor estimates currently offer mode/mean/median with optional grouping.
+
+### Cloudflare deployment preparation — 2026-10-13
+
+- Added opt-in static export, Cloudflare Worker asset serving and a streaming same-origin API gateway. Normal Next.js API rewrites remain enabled outside export mode. Generated assets, Wrangler state, and local variable files are ignored.
+- Cloudflare static export and normal production build/TypeScript checks passed. Wrangler 4.11.1 deployment dry-run passed. Three gateway tests passed (assets/missing backend, request body/session and response cookies, origin protection/upstream failures).
+- The exported frontend rendered successfully in a browser under local Miniflare. An unconnected backend returned the intentional HTTP 503 explanation. Wrangler could not obtain remote Request.cf metadata under the restricted policy, but local simulation started and served the tested assets correctly.
+- Native production upload and interactive-editor smoke checks passed after restoring the normal build; no backend functionality was changed.
+- Cloudflare account credentials and a hosted Python backend are not connected, so no Cloudflare publication or public URL is claimed. A secure CLOUDFLARE_API_TOKEN requirement was saved for api.cloudflare.com; it remains a pending configuration change requiring credential entry and publication.

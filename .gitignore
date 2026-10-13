@@ -29,3 +29,8 @@ secrets/
 *.p12
 *.pfx
 credentials*.json
+
+# Cloudflare deployment build outputs and local credentials
+frontend/out/
+.wrangler/
+.dev.vars

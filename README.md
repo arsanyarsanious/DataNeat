@@ -312,3 +312,7 @@ Download the editor copy as **XLSX** or **CSV**, and download the **REPORT** for
 - `GET /api/files/{file_id}/editor/download?format=xlsx|csv|report`: export the current editor copy or JSON audit report.
 
 All endpoints use the existing private session checks. Neither starting the editor nor applying a cell fix changes the original uploaded data or the independent cleaning-plan results.
+
+## Cloudflare hosting
+
+The Cloudflare frontend and same-origin API gateway configuration is in [deploy/cloudflare](deploy/cloudflare/README.md). Static export is enabled only by `CLOUDFLARE_EXPORT=1`; normal Next.js/Docker builds are unchanged. Publishing requires a connected Cloudflare account and an HTTPS host for the existing Python backend. This configuration does not run pandas or persist cleaning jobs inside a free Cloudflare Worker. A dry-run or locally rendered static frontend is not a public deployment.
