@@ -1549,3 +1549,14 @@ input:not([type="checkbox"]) {
 .percentage-controls .setting {
   margin-left: 0;
 }
+.symbol-controls,
+.phone-controls {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  min-width: 0;
+}
+.symbol-controls .setting,
+.phone-controls .setting {
+  margin-left: 0;
+}

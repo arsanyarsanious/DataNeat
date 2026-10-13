@@ -1,4 +1,5 @@
 import type { Operation } from "@/lib/types";
+import { SymbolControls } from "./symbol-controls";
 const currencies = [
   "USD",
   "EUR",
@@ -45,7 +46,7 @@ export function CurrencyControls({
   function update(values: Record<string, unknown>) {
     onChange({ ...operation.parameters, ...values });
   }
-  return (
+  const advanced = (
     <div className="currency-controls">
       <div className="currency-settings">
         <label className="setting">
@@ -120,5 +121,13 @@ export function CurrencyControls({
         values.
       </p>
     </div>
+  );
+  return (
+    <SymbolControls
+      operation={operation}
+      onChange={onChange}
+      disabled={disabled}
+      advanced={advanced}
+    />
   );
 }

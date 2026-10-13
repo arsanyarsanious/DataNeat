@@ -42,6 +42,23 @@ def analyze_percentage_column(series):
 
 
 def normalize_percentage(series, settings):
+    action = settings.get("action", "legacy")
+    if action == "preserve":
+        return series.copy(deep=True)
+    if action in ("add", "remove"):
+
+        def notation(value):
+            if missing(value):
+                return value
+            match = PATTERN.fullmatch(str(value).strip())
+            if not match:
+                return value
+            # Literal notation only: keep the numeric text, including its scale and zeros.
+            return match[1] + ("%" if action == "add" else "")
+
+        return series.map(notation)
+    if action != "legacy":
+        raise ValueError("Choose add, remove, or no change")
     output = settings.get("format", "with_sign")
     interpretation = settings.get("bare_interpretation", "preserve")
     if output not in ("with_sign", "without_sign", "ratio") or interpretation not in (

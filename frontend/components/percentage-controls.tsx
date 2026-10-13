@@ -11,7 +11,7 @@ export function PercentageControls({
   function update(values: Record<string, unknown>) {
     onChange({ ...operation.parameters, ...values });
   }
-  return (
+  const advanced = (
     <div className="percentage-controls">
       <label className="setting">
         Percentage output
@@ -46,6 +46,33 @@ export function PercentageControls({
         unchanged until you choose their interpretation. Invalid values and
         missing cells are preserved.
       </p>
+    </div>
+  );
+  return (
+    <div className="percentage-controls">
+      <label className="setting">
+        Percentage mark handling
+        <select
+          aria-label={`Percentage action for ${operation.column}`}
+          disabled={disabled}
+          value={String(operation.parameters.action || "preserve")}
+          onChange={(e) => update({ action: e.target.value })}
+        >
+          <option value="preserve">No change</option>
+          <option value="add">Add % to all numbers</option>
+          <option value="remove">Remove % from all numbers</option>
+          <option value="legacy">Advanced: rescale percentages / ratios</option>
+        </select>
+      </label>
+      {operation.parameters.action === "legacy" ? (
+        advanced
+      ) : (
+        <p className="currency-note">
+          This changes the mark only: 10%, 20 and 0.2 become 10%, 20% and 0.2%
+          when you add %. Removing it produces 10, 20 and 0.2. Numbers are not
+          multiplied or divided. Missing and invalid values stay unchanged.
+        </p>
+      )}
     </div>
   );
 }

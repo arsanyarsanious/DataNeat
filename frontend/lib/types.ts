@@ -5,6 +5,7 @@ export type Issue = {
   examples: string[];
   conflicting_categories?: number;
   formats?: Record<string, number>;
+  country_codes?: Record<string, number>;
 };
 export type DateAnalysis = {
   patterns: Record<string, number>;

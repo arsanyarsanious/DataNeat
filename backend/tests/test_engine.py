@@ -411,3 +411,169 @@ def test_ratio_type_context_is_conservative():
         i["issue"] == "percentage_inconsistency"
         for i in profile_column(pd.Series(["001", "2%"], name="ID"))["issues"]
     )
+
+
+@pytest.mark.parametrize(
+    "action,expected",
+    [
+        ("add", ["10%", "20%", "0.2%", "invalid", None]),
+        ("remove", ["10", "20", "0.2", "invalid", None]),
+        ("preserve", ["10%", "20", "0.2", "invalid", None]),
+    ],
+)
+def test_percentage_literal_actions_apply_to_all_numbers_without_scaling(
+    action, expected
+):
+    from app.core.percentage import normalize_percentage
+
+    values = pd.Series(["10%", "20", "0.2", "invalid", None])
+    assert normalize_percentage(values, {"action": action}).tolist() == expected
+    assert normalize_percentage(
+        pd.Series(["010.00%", "020.00"]), {"action": "add"}
+    ).tolist() == ["010.00%", "020.00%"]
+
+
+@pytest.mark.parametrize(
+    "action,expected",
+    [
+        ("add", ["100$", "200$", "030.00$", "invalid", None]),
+        ("remove", ["100", "200", "030.00", "invalid", None]),
+        ("preserve", ["$100", "200 EUR", "030.00", "invalid", None]),
+    ],
+)
+def test_currency_literal_actions_cover_every_label_and_bare_number(action, expected):
+    from app.core.currency import normalize_currency
+
+    values = pd.Series(["$100", "200 EUR", "030.00", "invalid", None])
+    assert (
+        normalize_currency(
+            values, {"action": action, "symbol": "$", "position": "suffix"}
+        ).tolist()
+        == expected
+    )
+    assert values.tolist() == ["$100", "200 EUR", "030.00", "invalid", None]
+
+
+def test_arbitrary_numeric_labels_and_uniform_currency_offer_the_same_controls():
+    from app.core.symbols import normalize_symbols
+
+    values = pd.Series(["10kg", "20", "30 kg"], name="Weight")
+    report = profile_column(values)
+    assert report["detected_type"] == "number_with_symbol"
+    assert any(i["issue"] == "symbol_inconsistency" for i in report["issues"])
+    assert normalize_symbols(
+        values, {"action": "add", "symbol": "kg", "position": "suffix"}
+    ).tolist() == ["10 kg", "20 kg", "30 kg"]
+    assert normalize_symbols(values, {"action": "remove"}).tolist() == [
+        "10",
+        "20",
+        "30",
+    ]
+    plan = generate_cleaning_plan(pd.DataFrame({"Amount": ["$100", "$200"]}))
+    operation = next(o for o in plan if o["operation"] == "normalize_currency")
+    assert operation["parameters"]["action"] == "preserve"
+    assert not operation["enabled"]
+
+
+def test_phone_type_analysis_and_approved_country_formats_preserve_local_zeros():
+    from app.core.phone import analyze_phone_column, normalize_phone
+
+    values = pd.Series(
+        ["+201001234567", "201001234567", "00201001234567", "01001234567", "invalid"],
+        name="Phone_Number",
+    )
+    original = values.copy(deep=True)
+    report = profile_column(values)
+    assert report["detected_type"] == "phone"
+    analysis = analyze_phone_column(values)
+    assert len(analysis["formats"]) == 4 and analysis["country_codes"] == {"20": 3}
+    assert analysis["invalid_count"] == 1
+    assert normalize_phone(values, {"action": "preserve"}).tolist() == values.tolist()
+    assert normalize_phone(
+        values, {"action": "international", "region": "EG"}
+    ).tolist() == ["+201001234567"] * 4 + ["invalid"]
+    assert normalize_phone(
+        values, {"action": "international_digits", "region": "EG"}
+    ).tolist() == ["201001234567"] * 4 + ["invalid"]
+    assert normalize_phone(values, {"action": "national", "region": "EG"}).tolist() == [
+        "01001234567"
+    ] * 4 + ["invalid"]
+    assert (
+        normalize_phone(values, {"action": "remove_plus"}).tolist()[0] == "201001234567"
+    )
+    assert normalize_phone(
+        pd.Series(["+390669820001"]), {"action": "national"}
+    ).tolist() == ["0669820001"]
+    assert normalize_phone(
+        pd.Series(["+442079460018", "01001234567"]),
+        {"action": "international", "region": "EG"},
+    ).tolist() == ["+442079460018", "+201001234567"]
+    with pytest.raises(ValueError):
+        normalize_phone(values, {"action": "international"})
+    pd.testing.assert_series_equal(values, original)
+    assert (
+        detect_column_type(
+            pd.Series(
+                [
+                    "+201001234567",
+                    "+201001234568",
+                    "+201001234569",
+                    "+201001234570",
+                    "01001234567",
+                ],
+                name="Contact",
+            )
+        )["type"]
+        == "phone"
+    )
+    assert (
+        detect_column_type(pd.Series(["+201001234567"], name="Customer_ID"))["type"]
+        == "identifier"
+    )
+
+
+def test_symbol_evidence_is_not_hidden_by_zero_padded_amounts():
+    assert (
+        detect_column_type(pd.Series(["010", "20%"], name="Rate"))["type"]
+        == "percentage"
+    )
+    assert (
+        detect_column_type(pd.Series(["010", "$20"], name="Amount"))["type"]
+        == "currency"
+    )
+    assert (
+        detect_column_type(pd.Series(["001", "002"], name="ID"))["type"] == "identifier"
+    )
+
+
+def test_phone_metadata_does_not_strip_local_digits_that_resemble_calling_codes():
+    from app.core.phone import analyze_phone_column, normalize_phone
+
+    assert normalize_phone(
+        pd.Series(["3912345678"]), {"action": "international", "region": "IT"}
+    ).tolist() == ["+393912345678"]
+    assert normalize_phone(
+        pd.Series(["+393912345678"]), {"action": "national"}
+    ).tolist() == ["3912345678"]
+    assert not analyze_phone_column(pd.Series(["+201001234567", "+442079460018"]))[
+        "inconsistent"
+    ]
+    assert normalize_phone(
+        pd.Series([2025550123.0]), {"action": "international", "region": "US"}
+    ).tolist() == ["+12025550123"]
+
+
+def test_formula_safe_phone_exports_can_be_reimported_without_losing_identity():
+    from app.core.phone import normalize_phone
+
+    value = "'+201001234567"
+    assert profile_column(pd.Series([value], name="Phone"))["detected_type"] == "phone"
+    assert normalize_phone(pd.Series([value]), {"action": "preserve"}).tolist() == [
+        value
+    ]
+    assert normalize_phone(
+        pd.Series([value]), {"action": "international", "region": "EG"}
+    ).tolist() == ["+201001234567"]
+    assert normalize_phone(pd.Series([value]), {"action": "remove_plus"}).tolist() == [
+        "201001234567"
+    ]

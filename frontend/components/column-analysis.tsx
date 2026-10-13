@@ -5,6 +5,9 @@ const names: Record<string, string> = {
   ambiguous_dates: "Dates with two possible meanings",
   currency_inconsistency: "Mixed currency notation",
   percentage_inconsistency: "Mixed percentage notation",
+  phone_inconsistency: "Mixed country codes and + notation",
+  invalid_phone: "Unrecognized phone numbers",
+  symbol_inconsistency: "Mixed numeric symbols or labels",
   missing_values: "Missing values",
   extra_whitespace: "Extra whitespace",
   case_inconsistency: "Inconsistent capitalization",
@@ -73,6 +76,39 @@ export function ColumnAnalysis({
               <p>
                 These dates could mean day/month or month/day. They stay
                 unchanged until you confirm an interpretation.
+              </p>
+            )}
+            {(issue.issue === "phone_inconsistency" ||
+              issue.issue === "symbol_inconsistency") && (
+              <>
+                <p>
+                  {issue.issue === "phone_inconsistency"
+                    ? "Country codes, +, 00 prefixes, and local numbers are mixed. Choose a country and the format you want in the cleaning plan."
+                    : "Some numeric values have a symbol or label and others do not. Add a chosen symbol to every number, remove all labels, or make no change."}
+                </p>
+                <div className="format-chips">
+                  {Object.entries(issue.formats || {}).map(
+                    ([format, count]) => (
+                      <span key={format}>
+                        {format}: {count} rows
+                      </span>
+                    ),
+                  )}
+                </div>
+                {issue.country_codes && (
+                  <p>
+                    Detected country codes:{" "}
+                    {Object.entries(issue.country_codes)
+                      .map(([code, count]) => `+${code}: ${count} rows`)
+                      .join(" · ")}
+                  </p>
+                )}
+              </>
+            )}
+            {issue.issue === "invalid_phone" && (
+              <p>
+                These values could not be recognized as phone numbers. They are
+                preserved rather than guessed or deleted.
               </p>
             )}
             {issue.issue === "percentage_inconsistency" && (

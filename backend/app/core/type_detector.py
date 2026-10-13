@@ -4,6 +4,8 @@ from .common import missing, numeric
 from .currency import currency_marker, parse_currency
 from .date_analyzer import detect_date_pattern, is_valid_date
 from .percentage import parse_percentage
+from .phone import international_phone, phone_hint, phone_text
+from .symbols import parse_numeric_symbol
 
 BOOLEAN_MAP = {
     "true": True,
@@ -53,10 +55,29 @@ def detect_column_type(series, threshold=0.8):
         return {"type": "unknown", "match_score": 0.0}
     name = str(series.name or "").lower()
     strings = [str(v).strip() for v in values]
-    if re.search(
-        r"(^|[_\s])(id|identifier|code|zip|postal|phone|sku)($|[_\s])", name
-    ) or any(re.fullmatch(r"0\d+", s) for s in strings):
+    if phone_hint(series.name):
+        score = 0
+        for value in values:
+            try:
+                phone_text(value)
+                score += 1
+            except ValueError:
+                pass
+        return {"type": "phone", "match_score": round(score / len(values), 4)}
+    if re.search(r"(^|[_\s])(id|identifier|code|zip|postal|phone|sku)($|[_\s])", name):
         return {"type": "identifier", "match_score": 1.0}
+    international_count = 0
+    for value in values:
+        try:
+            if international_phone(value):
+                international_count += 1
+        except ValueError:
+            pass
+    if international_count / len(values) >= threshold:
+        return {
+            "type": "phone",
+            "match_score": round(international_count / len(values), 4),
+        }
     # Recognize the structure even when every date is impossible (e.g. 88-99-2089).
     date_shapes = sum(bool(detect_date_pattern(v)) for v in values) / len(values)
     if date_shapes >= threshold:
@@ -96,6 +117,22 @@ def detect_column_type(series, threshold=0.8):
         and (percent_score >= threshold or (percent_context and percent_score >= 0.5))
     ):
         return {"type": "percentage", "match_score": round(percent_score, 4)}
+    symbol_matches = 0
+    symbol_present = False
+    for value in values:
+        try:
+            _, token, _ = parse_numeric_symbol(value)
+            symbol_matches += 1
+            symbol_present = symbol_present or bool(token)
+        except ValueError:
+            pass
+    if symbol_present and symbol_matches / len(values) >= threshold:
+        return {
+            "type": "number_with_symbol",
+            "match_score": round(symbol_matches / len(values), 4),
+        }
+    if any(re.fullmatch(r"0\d+", s) for s in strings):
+        return {"type": "identifier", "match_score": 1.0}
     checks = []
     if any(
         s.lower() in {"yes", "no", "true", "false", "y", "n"} for s in strings
