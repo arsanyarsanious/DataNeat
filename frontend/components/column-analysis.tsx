@@ -23,9 +23,16 @@ export function ColumnAnalysis({
   compact?: boolean;
 }) {
   const [order, setOrder] = useState("alphabetical");
-  const sorted = order === "alphabetical"
-    ? [...columns].sort((a, b) => a.column_name.localeCompare(b.column_name, undefined, { numeric: true }))
-    : order === "reverse" ? [...columns].reverse() : [...columns];
+  const sorted =
+    order === "alphabetical"
+      ? [...columns].sort((a, b) =>
+          a.column_name.localeCompare(b.column_name, undefined, {
+            numeric: true,
+          }),
+        )
+      : order === "reverse"
+        ? [...columns].reverse()
+        : [...columns];
   const problem = sorted.filter((c) => c.issues.length),
     healthy = sorted.filter((c) => !c.issues.length);
   function renderColumn(c: Column) {
@@ -68,6 +75,20 @@ export function ColumnAnalysis({
                   : ""}
               </span>
             </div>
+            {issue.issue === "missing_values" && c.imputation && (
+              <div>
+                <p>
+                  {c.missing_count} missing cells ({c.missing_percentage}%).
+                  Suggested imputation: {c.imputation.method}.{" "}
+                  {c.imputation.explanation}
+                </p>
+                <p>
+                  Imputation is optional. Review methods, grouping, ordering,
+                  and assumptions in the cleaning plan. Missing percentage alone
+                  does not establish random missingness.
+                </p>
+              </div>
+            )}
             {issue.issue === "invalid_dates" && (
               <p>
                 These values cannot be parsed as real calendar dates. In the
@@ -135,9 +156,10 @@ export function ColumnAnalysis({
             {issue.issue === "currency_inconsistency" && (
               <>
                 <p>
-                  Some amounts use different currency labels or comma formatting.
-                  Choose whether to include a currency symbol and thousands
-                  separators for all recognized amounts in the cleaning plan.
+                  Some amounts use different currency labels or comma
+                  formatting. Choose whether to include a currency symbol and
+                  thousands separators for all recognized amounts in the
+                  cleaning plan.
                 </p>
                 <div className="format-chips">
                   {Object.entries(issue.formats || {}).map(
@@ -189,13 +211,15 @@ export function ColumnAnalysis({
     <div className="column-analysis">
       <div className="analysis-section-heading">
         <h2>{compact ? "Remaining issues by column" : "Issues by column"}</h2>
-        <p>
-          {problem.length} columns need attention.
-        </p>
+        <p>{problem.length} columns need attention.</p>
       </div>
       <label className="setting">
         Sort columns
-        <select aria-label="Sort analysis columns" value={order} onChange={(e) => setOrder(e.target.value)}>
+        <select
+          aria-label="Sort analysis columns"
+          value={order}
+          onChange={(e) => setOrder(e.target.value)}
+        >
           <option value="alphabetical">Column name (A–Z)</option>
           <option value="position">Column position (left to right)</option>
           <option value="reverse">Column position (right to left)</option>

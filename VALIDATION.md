@@ -50,3 +50,12 @@ Backend suite: **61 passed**, including full-column add/remove/no-change behavio
 - Browser: all 9 Playwright workflows passed against native production servers; the new workflow checks original/reverse/alphabetical analysis order, the privacy section, and both formatted currency rows in the preview.
 - Both direct backend and frontend-proxied health requests returned OK. Docker images were not rebuilt for this change.
 - The first browser run rejected uploads because the manually restarted backend lacked the test origin in CORS_ORIGINS. Restoring the documented localhost and 127.0.0.1 origins resolved this configuration issue; the complete rerun passed.
+
+### Opt-in missing-data imputation — 2026-10-13
+
+- Implemented seven basic methods and five grouped methods with deterministic mode ties, finite numeric validation, explicit ordering, entity boundaries, missing-key safeguards, and no boundary extrapolation.
+- Backend: 123 pytest tests passed, including all methods, empty/all-missing columns, mixed types, unsorted numeric/time sequences, leading/trailing gaps, invalid parameters and dependencies, original/non-missing preservation, deterministic results, explicit approval, API preview/results, CSV/XLSX/report export, provenance through renaming and duplicate removal, and compatibility with existing execution order when no imputation is active.
+- Frontend: production Next.js build and TypeScript check passed. All 11 Playwright workflows passed against native production servers, including per-column selection/preview/approval, confirmation invalidation after edits, validation/download, and group/order dependency controls. Existing upload, dates, currencies, percentages, symbols, phone normalization, select-all, privacy, and analysis sorting workflows continue passing.
+- Ruff F/I checks and Git whitespace checks passed. Backend health on port 8000 and frontend-proxied health on port 3000 returned OK.
+- A test locator was corrected to distinguish the application error alert from Next.js's route announcer. Rapid repeated suites hit the unchanged 120-request/minute limit; a fresh backend run passed the entire browser suite. No rate-limit safeguards were disabled.
+- KNN/regression remain optional future work; no scikit-learn or external service was added. Directional fills/interpolation intentionally leave leading/trailing gaps, missing group keys, and insufficient-observation groups unfilled. Docker images were not rebuilt for this feature; native production behavior was validated.

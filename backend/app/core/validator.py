@@ -8,6 +8,10 @@ def validate_cleaning(original, cleaned, logs):
         return sum(log["modified_values"] for log in logs if log["operation"] in names)
 
     return {
+        "imputed_cells": modified(["impute_missing_values"]),
+        "imputation": [
+            log for log in logs if log["operation"] == "impute_missing_values"
+        ],
         "rows_before": len(original),
         "rows_after": len(cleaned),
         "missing_before": before["missing_count"],

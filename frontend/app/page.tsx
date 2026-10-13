@@ -32,6 +32,8 @@ import { CurrencyControls } from "@/components/currency-controls";
 import { PercentageControls } from "@/components/percentage-controls";
 import { PlanSelection } from "@/components/plan-selection";
 import { PhoneControls } from "@/components/phone-controls";
+import { ImputationControls } from "@/components/imputation-controls";
+import { ImputationAudit } from "@/components/imputation-audit";
 import { SymbolControls } from "@/components/symbol-controls";
 import {
   api,
@@ -40,6 +42,8 @@ import {
   type Operation,
   type Results,
   type Preview,
+  type Log,
+  type Validation,
 } from "@/lib/types";
 const label = (text: string) =>
   text.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
@@ -60,6 +64,8 @@ export default function Home() {
     [comparison, setComparison] = useState<{
       before: Preview;
       after: Preview;
+      operations: Log[];
+      validation: Validation;
     } | null>(null);
   const [uploadLimit, setUploadLimit] = useState(20);
   const input = useRef<HTMLInputElement>(null),
@@ -142,7 +148,12 @@ export default function Home() {
   }
   function update(id: string, patch: Partial<Operation>) {
     setOperations((items) =>
-      items.map((o) => (o.id === id ? { ...o, ...patch } : o)),
+      items.map((o) => {
+        const next = o.id === id ? { ...o, ...patch } : o;
+        return next.operation === "impute_missing_values"
+          ? { ...next, parameters: { ...next.parameters, confirmed: false } }
+          : next;
+      }),
     );
     setComparison(null);
   }
@@ -166,6 +177,20 @@ export default function Home() {
   }
   async function clean() {
     if (!uploaded) return;
+    if (
+      operations.some(
+        (o) =>
+          o.enabled &&
+          o.operation === "impute_missing_values" &&
+          o.parameters.method !== "preserve" &&
+          (!comparison || o.parameters.confirmed !== true),
+      )
+    ) {
+      setError(
+        "Preview the selected imputation methods and confirm each column before applying.",
+      );
+      return;
+    }
     setBusy(true);
     setError("");
     try {
@@ -632,7 +657,14 @@ export default function Home() {
                     disabled={busy}
                     onSelect={(enabled) => {
                       setOperations((items) =>
-                        items.map((o) => ({ ...o, enabled })),
+                        items.map((o) => ({
+                          ...o,
+                          enabled,
+                          parameters:
+                            o.operation === "impute_missing_values"
+                              ? { ...o.parameters, confirmed: false }
+                              : o.parameters,
+                        })),
                       );
                       setComparison(null);
                     }}
@@ -693,6 +725,17 @@ export default function Home() {
                                     : "Removes rows"}
                               </span>
                               <p>{o.explanation}</p>
+                              {o.operation === "impute_missing_values" &&
+                                uploaded && (
+                                  <ImputationControls
+                                    operation={o}
+                                    columns={uploaded.profile.columns}
+                                    disabled={busy}
+                                    onChange={(parameters) =>
+                                      update(o.id, { parameters })
+                                    }
+                                  />
+                                )}
                               {o.operation === "resolve_invalid_dates" &&
                                 uploaded && (
                                   <InvalidDateControls
@@ -862,9 +905,20 @@ export default function Home() {
                         const form = new FormData(e.currentTarget);
                         const column = String(form.get("column")),
                           name = String(form.get("name")).trim();
-                        if (name)
+                        if (name) {
+                          setComparison(null);
                           setOperations((items) => [
-                            ...items,
+                            ...items.map((o) =>
+                              o.operation === "impute_missing_values"
+                                ? {
+                                    ...o,
+                                    parameters: {
+                                      ...o.parameters,
+                                      confirmed: false,
+                                    },
+                                  }
+                                : o,
+                            ),
                             {
                               id: `rename-${Date.now()}`,
                               column,
@@ -878,6 +932,7 @@ export default function Home() {
                               requires_confirmation: true,
                             },
                           ]);
+                        }
                         e.currentTarget.reset();
                       }}
                     >
@@ -915,7 +970,19 @@ export default function Home() {
                         )}
                         Preview changes
                       </Button>
-                      <Button onClick={clean} disabled={busy}>
+                      <Button
+                        onClick={clean}
+                        disabled={
+                          busy ||
+                          operations.some(
+                            (o) =>
+                              o.enabled &&
+                              o.operation === "impute_missing_values" &&
+                              o.parameters.method !== "preserve" &&
+                              (!comparison || o.parameters.confirmed !== true),
+                          )
+                        }
+                      >
                         {busy ? (
                           <Loader2 className="spin" size={16} />
                         ) : (
@@ -925,6 +992,49 @@ export default function Home() {
                       </Button>
                     </div>
                   </div>
+                  {comparison && (
+                    <>
+                      <ImputationAudit operations={comparison.operations} />
+                      {operations
+                        .filter(
+                          (o) =>
+                            o.enabled &&
+                            o.operation === "impute_missing_values" &&
+                            o.parameters.method !== "preserve",
+                        )
+                        .map((o) => (
+                          <label
+                            className="assumption-check imputation-approval"
+                            key={o.id}
+                          >
+                            <input
+                              type="checkbox"
+                              disabled={busy}
+                              aria-label={`Confirm imputation for ${o.column}`}
+                              checked={o.parameters.confirmed === true}
+                              onChange={(e) =>
+                                setOperations((items) =>
+                                  items.map((item) =>
+                                    item.id === o.id
+                                      ? {
+                                          ...item,
+                                          parameters: {
+                                            ...item.parameters,
+                                            confirmed: e.target.checked,
+                                          },
+                                        }
+                                      : item,
+                                  ),
+                                )
+                              }
+                            />
+                            I reviewed the preview for {o.column} and approve
+                            filling missing cells with estimates or
+                            placeholders.
+                          </label>
+                        ))}
+                    </>
+                  )}
                   {comparison && (
                     <div className="comparison">
                       <section className="panel">
@@ -1021,6 +1131,7 @@ export default function Home() {
                       disabled={busy}
                     />
                   </section>
+                  <ImputationAudit operations={results.operations} />
                   <div className="result-grid">
                     <section className="panel">
                       <div className="panel-heading">
@@ -1087,12 +1198,36 @@ export default function Home() {
               )}
             </>
           )}
-          <section id="privacy" className="column-card" aria-labelledby="privacy-heading">
+          <section
+            id="privacy"
+            className="column-card"
+            aria-labelledby="privacy-heading"
+          >
             <h2 id="privacy-heading">Privacy policy</h2>
-            <p>Your spreadsheets are used only to analyze, preview, clean, and export the changes you request. DataNeat does not sell or share spreadsheet contents with third parties, use them for advertising or AI training, or send them to external AI services.</p>
-            <p>Processing takes place on the server running DataNeat. When you run it locally, that server is your computer. On a hosted website, uploads are stored on the hosting server, where its operator controls infrastructure access and backups.</p>
-            <p>Files are restricted to your browser session. A session cookie is used for this access; no advertising or tracking cookies are used. Files become inaccessible after 24 hours and expired files are removed during cleanup. You can use Delete file to remove the active file and its associated results sooner.</p>
-            <p>This policy describes the current application. Any future third-party integrations or changes in data use must be disclosed before use.</p>
+            <p>
+              Your spreadsheets are used only to analyze, preview, clean, and
+              export the changes you request. DataNeat does not sell or share
+              spreadsheet contents with third parties, use them for advertising
+              or AI training, or send them to external AI services.
+            </p>
+            <p>
+              Processing takes place on the server running DataNeat. When you
+              run it locally, that server is your computer. On a hosted website,
+              uploads are stored on the hosting server, where its operator
+              controls infrastructure access and backups.
+            </p>
+            <p>
+              Files are restricted to your browser session. A session cookie is
+              used for this access; no advertising or tracking cookies are used.
+              Files become inaccessible after 24 hours and expired files are
+              removed during cleanup. You can use Delete file to remove the
+              active file and its associated results sooner.
+            </p>
+            <p>
+              This policy describes the current application. Any future
+              third-party integrations or changes in data use must be disclosed
+              before use.
+            </p>
           </section>
           <footer>
             <span>

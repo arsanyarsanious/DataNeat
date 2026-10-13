@@ -1,0 +1,7 @@
+Entity,Time,Reading,Category
+A,2025-01-01,10,standard
+A,2025-01-02,NA,
+A,2025-01-03,30,standard
+B,2025-01-01,100,premium
+B,2025-01-02,NA,
+B,2025-01-03,130,premium
