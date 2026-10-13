@@ -25,6 +25,7 @@ import {
   SearchCheck,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { InteractiveSheet } from "@/components/interactive-sheet";
 import { DataTable } from "@/components/data-table";
 import { ColumnAnalysis } from "@/components/column-analysis";
 import { InvalidDateControls } from "@/components/invalid-date-controls";
@@ -49,7 +50,7 @@ const label = (text: string) =>
   text.replaceAll("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
 export default function Home() {
   const [stage, setStage] = useState<
-    "upload" | "profile" | "configure" | "results"
+    "upload" | "profile" | "configure" | "results" | "editor"
   >("upload");
   const [uploaded, setUploaded] = useState<Upload | null>(null),
     [file, setFile] = useState<File | null>(null),
@@ -68,6 +69,7 @@ export default function Home() {
       validation: Validation;
     } | null>(null);
   const [uploadLimit, setUploadLimit] = useState(20);
+  const [interactive, setInteractive] = useState(false);
   const input = useRef<HTMLInputElement>(null),
     mounted = useRef(true);
   useEffect(() => {
@@ -139,7 +141,7 @@ export default function Home() {
       setUploaded(response);
       setOperations(response.plan);
       setFile(selected);
-      setStage("profile");
+      setStage(interactive ? "editor" : "profile");
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -358,7 +360,9 @@ export default function Home() {
                     ? "Meet your data."
                     : stage === "configure"
                       ? "A little cleanup. A lot of clarity."
-                      : "Your data, looking better."}
+                      : stage === "editor"
+                        ? "Your interactive spreadsheet."
+                        : "Your data, looking better."}
               </h1>
               <p>
                 {stage === "upload"
@@ -367,7 +371,9 @@ export default function Home() {
                     ? "A clear picture of what’s in your spreadsheet, and what needs attention."
                     : stage === "configure"
                       ? "You’re in control. Review each suggestion before anything changes."
-                      : "Review what changed, see what remains, and take your spreadsheet with you."}
+                      : stage === "editor"
+                        ? "Review colored issues in your spreadsheet and confirm the fixes you choose."
+                        : "Review what changed, see what remains, and take your spreadsheet with you."}
               </p>
             </div>
             {uploaded && (
@@ -385,7 +391,7 @@ export default function Home() {
                   "profile",
                   "configure",
                   "results",
-                ].indexOf(stage);
+                ].indexOf(stage === "editor" ? "configure" : stage);
                 return (
                   <div
                     key={item}
@@ -418,6 +424,17 @@ export default function Home() {
                 <X size={16} />
               </button>
             </div>
+          )}
+          {stage === "upload" && (
+            <label className="assumption-check interactive-mode-choice">
+              <input
+                type="checkbox"
+                checked={interactive}
+                onChange={(e) => setInteractive(e.target.checked)}
+              />{" "}
+              Interactive spreadsheet: basic cleanup first, then fix colored
+              issues with confirmation.
+            </label>
           )}
           {stage === "upload" ? (
             <>
@@ -584,6 +601,20 @@ export default function Home() {
                   </Button>
                 </div>
               )}
+              {stage === "editor" && uploaded && (
+                <>
+                  <div className="dashboard-actions">
+                    <h2>Interactive spreadsheet</h2>
+                    <Button
+                      variant="outline"
+                      onClick={() => setStage("profile")}
+                    >
+                      Back to analysis
+                    </Button>
+                  </div>
+                  <InteractiveSheet fileId={uploaded.file_id} />
+                </>
+              )}
               {stage === "profile" && profile && uploaded && (
                 <>
                   <Stats
@@ -615,6 +646,13 @@ export default function Home() {
                         .join(", ")}
                     </div>
                   )}
+                  <Button variant="outline" onClick={() => setStage("editor")}>
+                    Open interactive spreadsheet
+                  </Button>
+                  <p>
+                    Apply basic cleanup to a copy, then review and fix colored
+                    issues directly in the sheet.
+                  </p>
                   <ColumnAnalysis columns={profile.columns} />
                   <section className="panel">
                     <div className="panel-heading">

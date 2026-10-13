@@ -207,3 +207,40 @@ class Operation(BaseModel):
 
 class CleaningRequest(BaseModel):
     operations: list[Operation] = Field(max_length=1000)
+
+
+class EditorRequest(BaseModel):
+    revision: int = Field(ge=0)
+    column: str = Field(min_length=1, max_length=512)
+    row_index: int = Field(ge=0)
+    scope: Literal["cell", "column"] = "cell"
+    action: Literal[
+        "replace",
+        "trim_whitespace",
+        "normalize_dates",
+        "normalize_boolean",
+        "normalize_numeric",
+        "normalize_capitalization",
+        "normalize_currency",
+        "normalize_percentage",
+        "normalize_symbols",
+        "normalize_phone",
+        "impute_missing_values",
+        "remove_duplicates",
+    ]
+    parameters: dict[str, Any] = Field(default_factory=dict)
+    value: str | float | bool | None = None
+    confirmed: bool = False
+
+    @model_validator(mode="after")
+    def validate_action(self):
+        if self.action != "replace":
+            Operation(
+                column=self.column,
+                operation=self.action,
+                parameters={**self.parameters, "confirmed": True},
+                enabled=True,
+            )
+        if isinstance(self.value, str) and len(self.value) > 10000:
+            raise ValueError("Replacement value is too long")
+        return self
