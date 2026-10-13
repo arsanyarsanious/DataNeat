@@ -1087,7 +1087,14 @@ export default function Home() {
               )}
             </>
           )}
-          <footer id="privacy">
+          <section id="privacy" className="column-card" aria-labelledby="privacy-heading">
+            <h2 id="privacy-heading">Privacy policy</h2>
+            <p>Your spreadsheets are used only to analyze, preview, clean, and export the changes you request. DataNeat does not sell or share spreadsheet contents with third parties, use them for advertising or AI training, or send them to external AI services.</p>
+            <p>Processing takes place on the server running DataNeat. When you run it locally, that server is your computer. On a hosted website, uploads are stored on the hosting server, where its operator controls infrastructure access and backups.</p>
+            <p>Files are restricted to your browser session. A session cookie is used for this access; no advertising or tracking cookies are used. Files become inaccessible after 24 hours and expired files are removed during cleanup. You can use Delete file to remove the active file and its associated results sooner.</p>
+            <p>This policy describes the current application. Any future third-party integrations or changes in data use must be disclosed before use.</p>
+          </section>
+          <footer>
             <span>
               <Layers3 size={15} />
               DataNeat <span className="footer-divider">/</span> Make room for

@@ -62,12 +62,14 @@ def currency_marker(value):
 
 def analyze_currency_column(series):
     formats = Counter()
+    grouping = set()
     for value in series:
         if missing(value):
             continue
         try:
             _, marker = parse_currency(value)
             formats[marker or "bare number"] += 1
+            grouping.add("," in str(value))
         except ValueError:
             pass
     labelled = sum(
@@ -77,7 +79,7 @@ def analyze_currency_column(series):
         "formats": dict(formats),
         "labelled_count": labelled,
         "unlabelled_count": formats.get("bare number", 0),
-        "inconsistent": bool(labelled and len(formats) > 1),
+        "inconsistent": bool(labelled and (len(formats) > 1 or len(grouping) > 1)),
         "affected_rows": sum(formats.values()),
     }
 
@@ -87,7 +89,31 @@ def normalize_currency(series, settings):
     if action in ("preserve", "add", "remove"):
         from .symbols import normalize_symbols
 
-        return normalize_symbols(series, settings)
+        if action == "preserve":
+            return series.copy(deep=True)
+        grouping = settings.get("grouping", "remove")
+        if grouping not in ("add", "remove"):
+            raise ValueError("Choose whether to include or remove commas")
+        from .symbols import parse_numeric_symbol
+
+        def format_number(value):
+            if missing(value):
+                return value
+            try:
+                number, _, _ = parse_numeric_symbol(value)
+            except ValueError:
+                return value
+            number = number.replace(",", "")
+            if grouping == "add":
+                integer, dot, decimal = number.partition(".")
+                sign = integer[:1] if integer[:1] in ("+", "-") else ""
+                digits = integer[len(sign) :]
+                integer = sign + re.sub(r"(?<=\d)(?=(\d{3})+$)", ",", digits)
+                number = integer + dot + decimal
+            return number
+
+        formatted = series.map(format_number)
+        return normalize_symbols(formatted, settings)
     if action != "legacy":
         raise ValueError("Choose add, remove, or no change")
     target = settings.get("currency", "")

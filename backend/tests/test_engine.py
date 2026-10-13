@@ -577,3 +577,22 @@ def test_formula_safe_phone_exports_can_be_reimported_without_losing_identity():
     assert normalize_phone(pd.Series([value]), {"action": "remove_plus"}).tolist() == [
         "201001234567"
     ]
+
+
+def test_currency_uniform_symbols_and_grouping():
+    from app.core.currency import analyze_currency_column, normalize_currency
+
+    values = pd.Series(["$1,234.50", "1234.50", "USD 1234.50", "-1234.00", "bad", None])
+    assert normalize_currency(
+        values, {"action": "add", "symbol": "$", "grouping": "add"}
+    ).tolist() == ["$1,234.50", "$1,234.50", "$1,234.50", "$-1,234.00", "bad", None]
+    assert normalize_currency(values, {"action": "remove"}).tolist() == [
+        "1234.50",
+        "1234.50",
+        "1234.50",
+        "-1234.00",
+        "bad",
+        None,
+    ]
+    assert normalize_currency(values, {"action": "preserve"}).equals(values)
+    assert analyze_currency_column(pd.Series(["$1,234", "$1234"]))["inconsistent"]

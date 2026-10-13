@@ -123,11 +123,25 @@ export function CurrencyControls({
     </div>
   );
   return (
+    <div>
     <SymbolControls
       operation={operation}
       onChange={onChange}
       disabled={disabled}
       advanced={advanced}
     />
+    {["add", "remove"].includes(String(operation.parameters.action)) && (
+      <label className="setting">
+        Thousands separators
+        <select aria-label={`Currency commas for ${operation.column}`} disabled={disabled}
+          value={String(operation.parameters.grouping || "remove")}
+          onChange={(e) => update({ grouping: e.target.value })}>
+          <option value="remove">No commas (1234.50)</option>
+          <option value="add">Include commas (1,234.50)</option>
+        </select>
+        Decimal digits are preserved. No change preserves the original formatting.
+      </label>
+    )}
+    </div>
   );
 }

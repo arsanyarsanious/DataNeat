@@ -229,3 +229,7 @@ Only the selected worksheet is exported. Workbook styles, merged cells, charts, 
 2. Per-cell date resolution and explicit locale-specific numeric/date formats.
 3. Encrypted object storage, quotas, gateway limits, and operational monitoring for public hosting.
 4. File-size/concurrency benchmarks, chunked processing, and broader Unicode/date/Excel-format fixtures.
+
+Analysis display options let you sort issue columns by name (A–Z), original spreadsheet position (left to right), or reverse position. Healthy columns remain in their separate expandable section and follow the same ordering. These display options do not reorder exported data.
+
+For currency columns, choose **Add the chosen symbol to all numbers** or **Remove all symbols / labels**, then choose whether to include thousands-separator commas. All recognized amounts receive the selected format; decimal digits are retained without rounding or currency conversion. **No change** preserves the original values. Missing and unsupported values remain unchanged. The in-app privacy policy explains processing location, session access, deletion, retention, and the absence of third-party data sharing or AI services in the current application.
