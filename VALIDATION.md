@@ -64,3 +64,10 @@ Backend suite: **61 passed**, including full-column add/remove/no-change behavio
 
 - Numeric imputation choices are now exposed for currency/unit and salary-like text columns, with explicit conversion/marker warnings. Identifiers, phones, booleans, and date targets remain protected. Runtime parsing still rejects unresolved labels or unsupported values.
 - 125 backend tests and all 12 production browser workflows passed, including currency Salary mean/median visibility and a mean preview after approved symbol removal. TypeScript and Ruff F/I checks passed. This change affects backend recommendation/validation logic; frontend application source and dependencies did not change.
+
+### Readable typography — 2026-10-13
+
+- Main text increased to 16 px, supporting text to 14–15 px, and smaller subheadings to 17 px at the default browser font setting. Small typography now uses relative rem sizes through shared CSS variables, including mobile rules, tables, controls, badges, help text, and imputation labels.
+- Production build (including TypeScript checks) and all 12 existing browser workflows passed. The initial mobile check identified a currency-control minimum-width overflow; flexible/grid container sizing was corrected without hiding overflow.
+- Manual browser inspection confirmed a 390 px page width on a 390 px viewport with both the default 16 px font setting and a larger 20 px browser default. Desktop and mobile screenshots were inspected. Table content scrolls within its panel.
+- This change is CSS only; no backend, dependencies, or calculation behavior changed. Docker images were not rebuilt in cloud.
