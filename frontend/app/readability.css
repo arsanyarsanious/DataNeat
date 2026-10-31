@@ -1,0 +1,427 @@
+/* Shared reading scale. Keep this layer after the component refresh styles. */
+:root {
+  --font-small: 0.9375rem;
+  --font-detail: 1rem;
+  --font-body: 1.0625rem;
+  --font-subheading: 1.1875rem;
+  --type-caption: 0.875rem;
+  --type-label: 0.9375rem;
+  --type-control: 1rem;
+}
+
+body {
+  font-family: var(--font-dataneat), "Segoe UI", Arial, sans-serif;
+  font-size: var(--font-body);
+  line-height: 1.6;
+}
+
+body :is(button, input, select, textarea) {
+  font-family: var(--font-dataneat), "Segoe UI", Arial, sans-serif;
+}
+
+body .button,
+body .button.small {
+  font-size: var(--type-label);
+  line-height: 1.5;
+}
+
+body :is(.setting, .access-card form label, .workflow-fields label) {
+  font-size: var(--type-label);
+  line-height: 1.6;
+}
+
+body :is(.setting, .access-card, .workflow-fields) :is(input, select, textarea),
+body :is(.affected-row-tools select, .issue-navigation select) {
+  font-size: var(--type-control);
+  line-height: 1.5;
+}
+
+/* Navigation stays compact, with comfortable text rather than tiny labels. */
+body .app-shell .compact-workspace-sidebar {
+  font-family: var(--font-dataneat), "Segoe UI", Arial, sans-serif;
+}
+body .compact-workspace-sidebar .brand-text strong { font-size: 20px; }
+body .compact-workspace-sidebar .workspace-label {
+  font-size: var(--type-caption);
+  letter-spacing: .08em;
+}
+body .compact-workspace-sidebar .nav-item {
+  font-size: var(--type-label);
+  line-height: 1.5;
+}
+body .compact-workspace-sidebar :is(.sidebar-note p, .sidebar-utility-label, .sidebar-bottom strong) {
+  font-size: var(--type-caption);
+  line-height: 1.6;
+}
+body .compact-workspace-sidebar .sidebar-bottom small {
+  font-size: var(--type-caption);
+  line-height: 1.5;
+}
+body .compact-workspace-sidebar .sidebar-theme-button {
+  height: auto;
+  min-height: 34px;
+}
+
+/* Shared page furniture and the upload journey. */
+body :is(.breadcrumb, .privacy-pill, .help-link, .topbar .button, .public-theme-toggle) {
+  font-size: var(--type-label);
+  line-height: 1.5;
+}
+body :is(.stepper, .stepper span, .stepper strong, .stepper button) {
+  font-size: var(--type-label);
+  line-height: 1.5;
+}
+body :is(.page-heading p, .upload-card p, .upload-note, .upload-progress, .workbook-boundary) {
+  font-size: var(--type-label);
+  line-height: 1.65;
+}
+body :is(.upload-card h2, .card-heading h2) { font-size: 24px; line-height: 1.35; }
+body .upload-card :is(input, select) { font-size: var(--type-control); }
+body .workspace-focused .page-heading h1 { font-size: 28px; line-height: 1.3; }
+body .workspace-focused .page-heading > .button { font-size: var(--type-label); }
+body .workspace-focused .file-banner strong { font-size: var(--type-control); }
+body .workspace-focused .file-banner small { font-size: var(--type-caption); }
+body :is(.method-choice h2, .flow-results h2) { font-size: 30px; line-height: 1.3; }
+body .method-choice h3 { font-size: 23px; }
+body :is(.recommended-path, .eyebrow) { font-size: var(--type-caption); }
+body .workspace-focused .cleaning-journey button,
+body .cleaning-journey button { font-size: var(--type-label); line-height: 1.5; }
+
+/* Toolbar labels and status messages can wrap without shrinking the text. */
+body :is(.ribbon-title, .ribbon-group-label) {
+  font-size: var(--type-caption);
+  line-height: 1.4;
+}
+body .ribbon-heading .overview-button,
+body .calm-workspace .ribbon-heading .ribbon-automatic,
+body .calm-workspace .ribbon-group .button,
+body :is(.overview-button, .sheet-toolbar-actions .button) {
+  font-size: var(--type-label);
+  line-height: 1.5;
+}
+body .calm-workspace .ribbon-heading .ribbon-automatic,
+body .calm-workspace .ribbon-group .button {
+  white-space: normal;
+}
+/* Earlier ribbon styling uses !important; match only its text-size override. */
+body .ribbon-quick-review { font-size: var(--type-label) !important; }
+body :is(.cleaning-success, .cleaning-success button, .cleaning-progress > span,
+  .next-suggestion, .next-suggestion span, .issue-navigation strong,
+  .issue-navigation .button, .quick-scope button, .issue-summary-chip button) {
+  font-size: var(--type-label);
+  line-height: 1.5;
+}
+body :is(.issue-navigation small, .issue-summary small, .table-footer,
+  .automatic-preparation-note, .cleaning-progress small,
+  .editor-sheet-panel > .imputed-estimate-note, .virtual-loading) {
+  font-size: var(--type-caption);
+  line-height: 1.6;
+}
+body .workspace-sheet .issue-navigation .button {
+  font-size: var(--type-label);
+  line-height: 1.5;
+}
+
+/* The virtualizer measures fixed 48px rows. Only text changes here: no row
+   height, padding or wrapping overrides, so scroll positioning is unchanged. */
+body .workspace-sheet .editor-table { font-size: var(--type-label); }
+body .workspace-sheet .editor-table .virtual-data-row .issue-cell {
+  font-size: var(--type-label);
+  line-height: 1.5;
+}
+body .workspace-sheet .editor-table .sheet-column-name {
+  font-size: var(--type-control);
+  line-height: 1.4;
+}
+body .workspace-sheet .editor-table th > .column-issue-button {
+  font-size: var(--type-caption);
+  line-height: 1.4;
+}
+body .workspace-sheet .editor-table :is(th:first-child, .row-number) {
+  font-size: var(--type-caption);
+}
+body .workspace-sheet .editor-table .virtual-data-row > td:first-child {
+  font-size: var(--type-caption);
+}
+
+/* Correction and column tools: regular text, clear hierarchy, scrollable body. */
+body :is(.cell-fix-panel, .column-settings-dialog, .shortcut-dialog,
+  .auto-cleaning-dialog, .unify-dialog) {
+  font-size: var(--type-control);
+  line-height: 1.6;
+}
+body .cell-fix-panel p { font-size: var(--type-label); line-height: 1.6; }
+body .cell-fix-panel small { font-size: var(--type-caption); line-height: 1.6; }
+body .cell-fix-panel > .panel-heading h3 { font-size: 18px; line-height: 1.45; }
+body .cell-fix-panel > .panel-heading .button { font-size: var(--type-caption); }
+body .cell-fix-panel > .panel-body > ul:first-child {
+  font-size: var(--type-label);
+  line-height: 1.65;
+}
+body .cell-fix-panel > .panel-body > ul:first-child strong { font-size: var(--type-label); }
+body .cell-fix-panel :is(.setting, .cell-more-options > summary,
+  .cell-more-options ul, .correction-example > strong, .preview-format-option,
+  .format-checkbox, .explicit-fix-scopes button, .explicit-fix-scopes > strong,
+  .marker-cell-choice > .button) {
+  font-size: var(--type-label);
+  line-height: 1.6;
+}
+body .cell-fix-panel .setting > :is(input:not([type=checkbox]), select, textarea) {
+  font-size: var(--type-control);
+  line-height: 1.5;
+}
+body .cell-fix-panel :is(.setting > small, .ordered-imputation > small,
+  .finding-classification, .correction-comparison small,
+  .explicit-fix-scopes small, .affected-count, .imputation-calculation-notes,
+  .accept-finding > summary, .advanced-settings-link, .no-pending-change,
+  .date-confirmation-summary) {
+  font-size: var(--type-caption);
+  line-height: 1.6;
+}
+body .cell-fix-panel .correction-comparison :is(span, strong) {
+  font-size: var(--type-label);
+  line-height: 1.55;
+}
+body .cell-fix-panel .recommended-correction small { font-size: var(--type-caption); }
+body .cell-fix-panel .recommended-correction strong { font-size: var(--type-control); }
+body .cell-fix-panel .recommended-correction .button { font-size: var(--type-caption); }
+body .cell-fix-panel .explicit-fix-scopes button { overflow-wrap: anywhere; }
+body .cell-fix-panel .cell-fix-footer > .button { font-size: var(--type-control); }
+body :is(.column-settings-heading h2, .shortcut-dialog h2, .auto-cleaning-title h2) {
+  font-size: 26px;
+  line-height: 1.35;
+}
+body :is(.column-settings-heading p, .column-settings-hint,
+  .column-settings-tabs button, .column-settings-content .setting,
+  .shortcut-dialog .setting, .queued-cleaning-plan details, .plan-review p,
+  .plan-review li, .auto-cleaning-question > .button, .auto-cleaning-exception,
+  .auto-cleaning-dialog small, .auto-example, .auto-exception-example) {
+  font-size: var(--type-label);
+  line-height: 1.6;
+}
+body :is(.column-settings-dialog, .shortcut-dialog, .auto-cleaning-dialog,
+  .unify-dialog) :is(input:not([type=checkbox]):not([type=radio]), select, textarea) {
+  font-size: var(--type-control);
+  line-height: 1.5;
+}
+body :is(.shortcut-comparison table, .unify-value-list) { font-size: var(--type-label); }
+
+/* Drawers and history need wrapping, especially with long column names. */
+body .workspace-drawer { font-size: var(--type-control); }
+body .workspace-drawer-heading h2 { font-size: 20px; line-height: 1.4; }
+body .workspace-drawer .marker-review > strong,
+body .workspace-drawer .marker-review-column .button {
+  font-size: var(--type-label);
+  line-height: 1.6;
+}
+body .workspace-drawer :is(.automatic-preparation-note, .workflow-tabs button,
+  .marker-review-column, .automatic-review-notice > p,
+  .automatic-review-notice > small, .automatic-review-notice > .button,
+  .history-step-details p, .setting, .marker-review p, .marker-review summary,
+  .marker-review label, .workflow-content, .history-actions .button) {
+  font-size: var(--type-label);
+  line-height: 1.6;
+}
+body .workspace-drawer :is(.marker-review, .automatic-review-notice,
+  .history-step-details, .history-step, .workflow-content) {
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+body .cleaning-history :is(p, small, .history-step strong) {
+  font-size: var(--type-label);
+  line-height: 1.6;
+}
+body .cleaning-history .history-actions .button {
+  font-size: var(--type-label);
+  line-height: 1.5;
+}
+/* History metadata was explicitly fixed to 11px with !important upstream. */
+body .cleaning-history .history-step small {
+  font-size: var(--type-caption) !important;
+  line-height: 1.6;
+}
+body .history-step-number { font-size: 13px; line-height: 1; }
+body :is(.history-step-details, .workflow-tabs button) { font-size: var(--type-label); }
+
+/* Quality workbench and guided/automatic workflows share the same type scale. */
+body .quality-launchers > h3 { font-size: 18px; }
+body .quality-launchers small { font-size: var(--type-caption); line-height: 1.6; }
+body :is(.quality-workbench, .simplify-dialog) { font-size: var(--type-control); }
+body :is(.quality-heading h2, .simplify-heading h2) { font-size: 26px; line-height: 1.35; }
+body .quality-workbench h3 { font-size: 20px; }
+body .quality-workbench :is(.setting, .quality-fields > label,
+  .quality-fields > label.quality-check, .quality-fields > label.check,
+  label.check, .quality-check, .quality-checkboxes label, legend,
+  summary, .quality-muted, .quality-pair-list button, .quality-metrics > span,
+  .quality-progress, .quality-success, .quality-notes ul, .quality-actions .button,
+  .button, .quality-tabs button, .quality-body button:not(.button)) {
+  font-size: var(--type-label);
+  line-height: 1.6;
+}
+body .quality-workbench :is(input:not([type=checkbox]):not([type=radio]), select, textarea) {
+  font-size: var(--type-control);
+  line-height: 1.5;
+}
+body .quality-workbench table { font-size: var(--type-label); }
+body .quality-workbench th { font-size: var(--type-caption); }
+body .quality-workbench :is(small, .quality-footer, .quality-heading small) {
+  font-size: var(--type-caption);
+  line-height: 1.6;
+}
+body .quality-metrics strong { font-size: 25px; }
+body .simplify-dialog :is(.setting, .button, summary, .notice,
+  .quick-clean-group-choice, .quick-clean-group p, .quick-clean-columns label,
+  .quick-clean-selection strong, .quick-clean-preview p,
+  .quick-clean-deferred ul, .quick-clean-save p, .quick-clean-saved p,
+  .quick-clean-saved li, .simplify-progress, .quick-clean-applied p,
+  .quick-clean-complete p, .quick-clean-complete li) {
+  font-size: var(--type-label);
+  line-height: 1.6;
+}
+body .simplify-dialog :is(input:not([type=checkbox]):not([type=radio]), select, textarea) {
+  font-size: var(--type-control);
+  line-height: 1.5;
+}
+body .simplify-dialog :is(.simplify-body > p, .quick-clean-group-choice strong) {
+  font-size: var(--type-control);
+}
+body .simplify-dialog :is(.simplify-heading p, .simplify-heading small,
+  .simplify-eyebrow, .quick-clean-group small, .quick-clean-selection small,
+  .quick-clean-deferred p, .simplify-footer, .quick-clean-safety) {
+  font-size: var(--type-caption);
+  line-height: 1.6;
+}
+body .simplify-dialog .quick-clean-safety { white-space: normal; }
+body .simplify-dialog .quick-clean-example-scroll table { font-size: var(--type-label); }
+body .simplify-dialog .quick-clean-preview h3 { font-size: 21px; }
+body .simplify-dialog :is(.quick-clean-applied h3, .quick-clean-complete h3) { font-size: 24px; }
+body :is(.guided-heading h2, .guided-heading h3, .guided-completion h3) { font-size: 20px; }
+body :is(.guided-heading small, .guided-progress, .guided-current > div > strong,
+  .guided-current > span) { font-size: var(--type-caption); line-height: 1.5; }
+body :is(.guided-current p, .guided-scope-note, .guided-notice,
+  .guided-cleaning > p, .guided-completion p, .guided-actions .button) {
+  font-size: var(--type-label);
+  line-height: 1.6;
+}
+body .guided-current { flex-wrap: wrap; }
+body :is(.guided-current h3, .guided-current h4) { font-size: 20px; line-height: 1.4; }
+body .cleaning-finish-card h2 { font-size: 26px; line-height: 1.35; }
+body .cleaning-finish-card p { font-size: var(--type-control); }
+body :is(.issue-column-choices legend, .issue-column-choices label,
+  .scope-more-options > summary) { font-size: var(--type-label); }
+body .issue-column-choices small { font-size: var(--type-caption); }
+
+/* Blocking explanations remain prominent, readable and inside their scroll area. */
+body :is(.cell-fix-panel .blocking-action-error strong,
+  .cell-fix-panel .blocking-action-error p, .blocking-action-error,
+  .simplify-dialog .blocking-error, .guided-cleaning [role=alert],
+  .quality-workbench .quality-error p, .quality-workbench .validation-error,
+  .error[role=alert], .workspace-persistent-error[role=alert]) {
+  font-size: var(--type-label);
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+
+/* Results and downloads retain a clear scale between metrics and captions. */
+body .results-metrics strong { font-size: 30px; }
+body :is(.results-metrics span, .download-revision, .download-extension) {
+  font-size: var(--type-caption);
+  line-height: 1.5;
+}
+body :is(.result-downloads h3, .download-section-heading h3) { font-size: 24px; }
+body .download-format-card h4 { font-size: 20px; }
+body :is(.result-downloads .editor-downloads > strong, .download-section-heading p,
+  .download-format-card > p, .download-format-actions .button) {
+  font-size: var(--type-label);
+  line-height: 1.6;
+}
+
+/* Public cover, sign-in and privacy pages. */
+body .cover-refresh :is(.welcome-pill, .cover-example-label, .cover-sample-badge,
+  .cover-sheet-footer, .cover-demo-status, .cover-cleaning-steps > span,
+  .cover-example-note, .welcome-footer strong) {
+  font-size: var(--type-caption);
+  line-height: 1.5;
+}
+body .cover-refresh :is(.welcome-note, .cover-promises, .welcome-sheet-title,
+  .welcome-footer, .public-theme-toggle) { font-size: var(--type-label); line-height: 1.6; }
+body .cover-refresh .welcome-description { font-size: 20px; line-height: 1.7; }
+body .cover-refresh .welcome-begin { font-size: 18px; }
+body .cover-refresh .welcome-table { font-size: var(--type-label); }
+body .cover-refresh .welcome-table thead th { font-size: var(--type-caption); }
+body .cover-refresh .welcome-table th.cover-row-number { font-size: var(--type-caption); }
+body .access-story h1 { font-size: clamp(34px, 4.5vw, 58px); line-height: 1.15; }
+body .access-card h2 { font-size: 30px; line-height: 1.3; }
+body :is(.access-disclosure, .access-help, .access-divider, .access-return,
+  .access-links button, .account-bar, .account-bar .button) {
+  font-size: var(--type-label);
+  line-height: 1.6;
+}
+body .access-card :is(.access-google, .access-submit) { font-size: var(--type-control); }
+body .privacy-page :is(p, li) { font-size: var(--font-body); line-height: 1.75; }
+body .privacy-page .privacy-section h2 { font-size: 24px; line-height: 1.35; }
+
+/* Files and handbook import route CSS separately. The extra page scope keeps
+   their reading scale stable regardless of the route stylesheet load order. */
+body .files-shell .files-topbar :is(.button, .breadcrumb),
+body .guide-shell .guide-topbar :is(.button, .breadcrumb) { font-size: var(--type-label); }
+body .account-files-page .account-files-intro h1 { font-size: clamp(32px, 3vw, 40px); }
+body .account-files-page :is(.account-files-intro > p, .account-files-tools > label,
+  .account-saved-file p, .account-saved-file-actions .button,
+  .account-files-message, .account-files-state p, .account-files-state a,
+  .account-file-inline-form label, .account-file-inline-form .button,
+  .account-file-delete-confirm p, .account-file-delete-confirm .button) {
+  font-size: var(--type-label);
+  line-height: 1.65;
+}
+body .account-files-page :is(.account-files-intro .eyebrow,
+  .account-files-intro .account-files-email, .account-files-count,
+  .account-files-retention) { font-size: var(--type-caption); line-height: 1.6; }
+body .account-files-page :is(.account-files-state h2, .account-saved-file h2) {
+  font-size: 20px;
+  line-height: 1.4;
+}
+body .account-files-page :is(.account-files-search input, .account-file-inline-form input) {
+  font-size: var(--type-control);
+  line-height: 1.5;
+}
+body :is(.account-file-storage-state, .account-file-storage-row > a,
+  .account-file-controls .account-file-save, .account-file-text-button,
+  .account-file-hint, .account-file-confirm, .account-file-confirm p,
+  .account-file-confirm .button, .account-file-error) {
+  font-size: var(--type-caption);
+  line-height: 1.6;
+}
+body .website-guide .guide-intro h1 { font-size: clamp(32px, 3vw, 40px); line-height: 1.25; }
+body .website-guide .guide-intro > p { font-size: 18px; line-height: 1.7; }
+body .website-guide :is(.guide-eyebrow, .guide-assurances, .guide-contents h2,
+  .guide-section-number, .guide-search-area > p) {
+  font-size: var(--type-caption);
+  line-height: 1.6;
+}
+body .website-guide :is(.guide-search-area > label, .guide-contents a,
+  .guide-section-summary, .guide-feature p, .guide-note p, .guide-related,
+  .guide-footer, .guide-footer p, .guide-no-results p, .guide-no-results .button) {
+  font-size: var(--type-label);
+  line-height: 1.75;
+}
+body .website-guide .guide-search input { font-size: var(--type-control); }
+body .website-guide :is(.guide-section h2, .guide-no-results h2) {
+  font-size: 23px;
+  line-height: 1.4;
+}
+body .website-guide .guide-feature h3 { font-size: 18px; line-height: 1.5; }
+
+@media (max-width: 700px) {
+  /* Keep the same readable controls on smaller screens; allow natural wrapping. */
+  body .workspace-focused .page-heading h1 { font-size: 25px; }
+  body :is(.method-choice h2, .flow-results h2) { font-size: 27px; }
+  body :is(.quality-heading h2, .simplify-heading h2,
+    .column-settings-heading h2, .shortcut-dialog h2, .auto-cleaning-title h2) {
+    font-size: 23px;
+  }
+  body .cover-refresh .welcome-description { font-size: 18px; }
+  body .cell-fix-panel .recommended-correction { grid-template-columns: minmax(0, 1fr); }
+  body .cell-fix-panel .recommended-correction .button { grid-column: 1; grid-row: auto; }
+  body .guided-current > span { white-space: normal; }
+}

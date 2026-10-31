@@ -2,7 +2,14 @@
 import { useState } from "react";
 import { CheckCheck, AlertTriangle } from "lucide-react";
 import type { Column } from "@/lib/types";
+import { ColumnNavigator } from "./column-navigator";
+import { IssueDetails } from "./issue-details";
 const names: Record<string, string> = {
+  data_format: "Data format interpretation", invalid_data_format: "Invalid data format",
+  invalid_email: "Invalid email addresses",
+  odd_value: "Values unlike the rest of the column",
+  date_format_inconsistency: "Mixed date formats",
+  boolean_inconsistency: "Inconsistent boolean labels",
   invalid_dates: "Invalid dates",
   ambiguous_dates: "Dates with two possible meanings",
   currency_inconsistency: "Mixed currency notation",
@@ -18,23 +25,19 @@ const names: Record<string, string> = {
 export function ColumnAnalysis({
   columns,
   compact = false,
+  selectedColumn,
+  onColumnChange,
 }: {
   columns: Column[];
   compact?: boolean;
+  selectedColumn?: string | null;
+  onColumnChange?: (name: string) => void;
 }) {
-  const [order, setOrder] = useState("alphabetical");
-  const sorted =
-    order === "alphabetical"
-      ? [...columns].sort((a, b) =>
-          a.column_name.localeCompare(b.column_name, undefined, {
-            numeric: true,
-          }),
-        )
-      : order === "reverse"
-        ? [...columns].reverse()
-        : [...columns];
-  const problem = sorted.filter((c) => c.issues.length),
-    healthy = sorted.filter((c) => !c.issues.length);
+  const [localColumn, setLocalColumn] = useState<string | null>(null);
+  const sorted = columns;
+  const problem = sorted.filter((c) => c.issues.length);
+  const requested = selectedColumn ?? localColumn;
+  const current = sorted.find(c => c.column_name === requested) || problem[0] || sorted[0];
   function renderColumn(c: Column) {
     return (
       <section
@@ -75,6 +78,10 @@ export function ColumnAnalysis({
                   : ""}
               </span>
             </div>
+            <IssueDetails label={names[issue.issue] || issue.issue.replaceAll("_", " ")}>
+            {issue.issue === "odd_value" && <p>These values differ from the dominant data type in this column, such as text among numbers or percentages among currency amounts. Review the examples before correcting or clearing cells; mixed values can be intentional. No automatic replacement is performed.</p>}
+            {issue.issue === "date_format_inconsistency" && <p>Different date formats appear in this column. Use Normalize Dates to standardize them to ISO format. Ambiguous day/month values remain unchanged unless you explicitly choose an interpretation.</p>}
+            {issue.issue === "boolean_inconsistency" && <p>Values such as Yes, TRUE, 1, and Y represent the same boolean meaning but use different labels. Use Normalize Boolean in the cleaning plan to standardize recognized values to true/false. Missing cells and unrecognized values are preserved.</p>}
             {issue.issue === "missing_values" && c.imputation && (
               <div>
                 <p>
@@ -180,11 +187,13 @@ export function ColumnAnalysis({
                 ))}
               </div>
             )}
+            </IssueDetails>
           </div>
         ))}
         {c.date_analysis && (
           <div className="date-evidence">
             <strong>Date interpretation evidence</strong>
+            <IssueDetails label="Date interpretation evidence">
             <p>
               Day-first evidence: {c.date_analysis.dd_mm_evidence} ·
               Month-first: {c.date_analysis.mm_dd_evidence}
@@ -195,6 +204,7 @@ export function ColumnAnalysis({
                 Conflicting date formats. Confirm ambiguous dates carefully.
               </p>
             )}
+            </IssueDetails>
           </div>
         )}
         {!c.issues.length && !compact && (
@@ -208,37 +218,15 @@ export function ColumnAnalysis({
     );
   }
   return (
-    <div className="column-analysis">
+    <div className="column-analysis column-workspace">
       <div className="analysis-section-heading">
         <h2>{compact ? "Remaining issues by column" : "Issues by column"}</h2>
         <p>{problem.length} columns need attention.</p>
       </div>
-      <label className="setting">
-        Sort columns
-        <select
-          aria-label="Sort analysis columns"
-          value={order}
-          onChange={(e) => setOrder(e.target.value)}
-        >
-          <option value="alphabetical">Column name (A–Z)</option>
-          <option value="position">Column position (left to right)</option>
-          <option value="reverse">Column position (right to left)</option>
-        </select>
-      </label>
-      {problem.length ? (
-        problem.map(renderColumn)
-      ) : (
-        <div className="notice">
-          <CheckCheck size={18} />
-          No column issues detected.
-        </div>
-      )}
-      {!compact && healthy.length > 0 && (
-        <details className="healthy-columns">
-          <summary>Columns with no detected issues ({healthy.length})</summary>
-          <div>{healthy.map(renderColumn)}</div>
-        </details>
-      )}
+      {current ? <>
+        <ColumnNavigator columns={sorted.map(c => ({ value: c.column_name, label: c.column_name, detail: c.issues.length ? `${c.issues.length} issue categories` : "No issues detected" }))} value={current.column_name} onChange={name => { setLocalColumn(name); onColumnChange?.(name); }} />
+        <div className="column-workspace-content" role="region" aria-label="Selected column analysis">{renderColumn(current)}</div>
+      </> : <div className="notice"><CheckCheck size={18} />No columns available.</div>}
     </div>
   );
 }

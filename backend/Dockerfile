@@ -3,6 +3,9 @@ WORKDIR /app
 COPY requirements*.txt ./
 RUN --mount=type=secret,id=build_ca \
     if [ -f /run/secrets/build_ca ]; then PIP_CERT=/run/secrets/build_ca pip install --no-cache-dir -r requirements.lock.txt; else pip install --no-cache-dir -r requirements.lock.txt; fi
+COPY pdf-dependencies.lock ./
+RUN --mount=type=secret,id=build_ca \
+    if [ -f /run/secrets/build_ca ]; then PIP_CERT=/run/secrets/build_ca pip install --no-cache-dir -r pdf-dependencies.lock; else pip install --no-cache-dir -r pdf-dependencies.lock; fi
 RUN useradd --create-home dataneat && mkdir /app/storage && chown dataneat:dataneat /app/storage
 COPY --chown=dataneat:dataneat app ./app
 USER dataneat

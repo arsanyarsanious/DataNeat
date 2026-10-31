@@ -3,11 +3,15 @@
 import math
 import re
 from collections import Counter
+from datetime import datetime, timedelta, timezone
+from .date_analyzer import parse_formatted_date, detect_date_pattern, DATE_OUTPUT_FORMATS, render_date
 
 import numpy as np
 import pandas as pd
 
-from .common import missing, scalar
+from .common import missing, scalar, ACTIVE_SETTINGS
+from .currency import parse_currency, SYMBOL_CODES
+from .percentage import parse_percentage
 from .type_detector import BOOLEAN_MAP, detect_column_type
 
 BASIC = (
@@ -26,8 +30,9 @@ GROUPED = (
     "group_forward_fill",
     "group_backward_fill",
 )
-METHODS = ("preserve", *BASIC, *GROUPED)
+METHODS = ("preserve", "date_sequence", *BASIC, *GROUPED)
 ORDERED = (
+    "date_sequence",
     "forward_fill",
     "backward_fill",
     "linear_interpolation",
@@ -129,9 +134,12 @@ def missing_pattern(series):
 
 
 def numeric_candidate(series, kind):
+    declared = ACTIVE_SETTINGS.get().get(str(series.name), {}).get("type")
+    if declared and declared not in ("numeric", "salary", "currency", "percentage"):
+        return False
     if kind in ("identifier", "phone", "boolean", "date", "datetime"):
         return False
-    if kind in ("integer", "decimal", "currency", "number_with_symbol"):
+    if kind in ("integer", "decimal", "currency", "number_with_symbol", "percentage"):
         return True
     if re.search(
         r"salary|wage|amount|price|cost|income|revenue|balance",
@@ -206,6 +214,13 @@ def recommendation(series, kind):
         ]
         method = "constant"
         reason = "Mean and median are available for this amount column, but some observed values are not plain finite numbers. Approve missing-marker normalization for placeholders and remove currency/unit labels using the formatting controls before numeric imputation. No currency conversion is performed; only combine amounts known to use the same unit. Unsupported values block the operation rather than being ignored."
+    if kind in ("date", "datetime") and stats["observed_count"]:
+        available += ["median", "group_median", "date_sequence"]
+        reason = "Date median estimates the chronological middle date; it is not a verified event date. Ambiguous and invalid observed dates must be resolved first."
+    if kind == "currency":
+        reason = "Mean and median read numeric amounts directly from currency notation and fill only missing cells. Observed values keep their original formatting. Conflicting currency labels block calculation; no currency conversion is performed. Confirm bare amounts use the same currency."
+    if kind == "percentage":
+        reason = "Mean and median are available for percentage amounts. Values with % are calculated in percentage points. Mixed marked and bare numbers require explicit scale normalization first; observed cells are preserved."
     return {
         "available_methods": available,
         "method": method,
@@ -353,7 +368,55 @@ def validate_parameters(method, parameters):
         )
 
 
+def imputation_summary(original, filled, detail):
+    """Summarize only values actually written, never a discarded full-column proposal."""
+    mask = original.map(missing)
+    imputed = mask & ~filled.map(missing)
+    detail.update(missing_before=int(mask.sum()), missing_after=int(filled.map(missing).sum()),
+        imputed_count=int(imputed.sum()),
+        imputed_cells=[{"row_index":scalar(i),"spreadsheet_row":int(i)+2,"is_imputed":True} for i in original.index[imputed]],
+        distribution_before=distribution(original), distribution_after=distribution(filled))
+    return detail
+
+
 def impute_missing_values(df, column, method, parameters):
+    validate_parameters(method, parameters)
+    if column not in df: raise ValueError("Unknown imputation column")
+    groups = parameters.get("group_by", [])
+    if not groups: return _impute_missing_values(df, column, method, parameters)
+    if any(c not in df or c == column for c in groups): raise ValueError("Grouping columns must exist and differ from the target column")
+    original = df[column]
+    mask = original.map(missing)
+    targets = mask & (df.index.isin(parameters["_target_rows"]) if "_target_rows" in parameters else True)
+    eligible = pd.Series(True,index=df.index)
+    for group in groups: eligible &= ~df[group].map(missing)
+    result = df.copy(deep=True).astype({column:object})
+    detail = {"method":method,"group_by":groups,"order_by":parameters.get("order_by"),"warnings":[],"failures":[],"excluded_estimates":0}
+    output_formats = {}
+    for labels, part in df.loc[eligible].groupby(groups,sort=False,dropna=False):
+        if not targets.loc[part.index].any(): continue
+        try:
+            cleaned, summary = _impute_missing_values(part,column,method,{**parameters,"_column_kind":parameters.get("_column_kind") or detect_column_type(original)["type"]})
+        except ValueError as exc:
+            detail["failures"].append({"group":str(labels),"reason":str(exc)})
+            detail["warnings"].append(f"Group {dict(zip(groups,labels if isinstance(labels,tuple) else (labels,)))} was left unchanged: {exc}")
+            continue
+        result.loc[part.index,column] = cleaned[column]
+        detail["warnings"].extend(summary["warnings"])
+        detail["excluded_estimates"] += summary.get("excluded_estimates",0)
+        if summary.get("date_output_format"):
+            for cell in summary["imputed_cells"]: output_formats[int(cell["row_index"])]=summary["date_output_format"]
+    skipped=int((targets & ~eligible).sum())
+    if skipped: detail["warnings"].append(f"{skipped} targeted cells have missing group keys and were left unchanged.")
+    if output_formats: detail["date_output_formats"]=output_formats
+    detail["warnings"]=list(dict.fromkeys(detail["warnings"]))
+    summary=imputation_summary(original,result[column],detail)
+    if summary["failures"] and not summary["imputed_count"]:
+        raise ValueError(summary["failures"][0]["reason"])
+    return result, summary
+
+
+def _impute_missing_values(df, column, method, parameters):
     """Return a new DataFrame and audit detail. Callers control explicit approval."""
     validate_parameters(method, parameters)
     if column not in df:
@@ -376,13 +439,81 @@ def impute_missing_values(df, column, method, parameters):
     }
     if method == "preserve":
         return result, detail
+    if method == "date_sequence":
+        from .date_sequence import complete_date_sequence
+        return complete_date_sequence(df, column, parameters)
     base = method.removeprefix("group_")
     detail["warnings"] = [
         WARNINGS[base],
         "Imputed values are estimates or placeholders, not verified observations.",
     ]
-    kind = detect_column_type(original)["type"]
-    if method in NUMERIC:
+    kind = parameters.get("_column_kind") or detect_column_type(original)["type"]
+    excluded = df.index.isin(parameters.get("_excluded_rows", []))
+    source_mask = mask | excluded
+    target_mask = mask & (df.index.isin(parameters["_target_rows"]) if "_target_rows" in parameters else True)
+    detail["excluded_estimates"] = int((excluded & ~mask).sum())
+    if detail["excluded_estimates"]: detail["warnings"].append(f"{detail['excluded_estimates']} previously imputed values were excluded from calculation sources.")
+    calculation = original
+    amount_marker = None
+    percentage_marked = False
+    if kind == "percentage" and base in ("mean", "median"):
+        parsed_percentages = {}
+        for index, value in original.loc[~source_mask].items():
+            try:
+                parsed_percentages[index] = parse_percentage(value)
+            except ValueError as exc:
+                raise ValueError(f"Column '{column}', spreadsheet row {int(index) + 2}, value {str(value)!r}: not a supported percentage.") from exc
+        marked_states = {marked for _, marked in parsed_percentages.values()}
+        if len(marked_states) > 1:
+            index = next(index for index, (_, marked) in parsed_percentages.items() if not marked)
+            raise ValueError(f"Column '{column}', spreadsheet row {int(index) + 2}, value {str(original.loc[index])!r}: percentage signs and bare numbers are mixed. Normalize the percentage scale before mean/median; choose whether bare numbers are percentage points or fractions.")
+        percentage_marked = marked_states == {True}
+        calculation = original.where(~source_mask).map(lambda value: None if missing(value) else float(parse_percentage(value)[0]))
+        detail["warnings"].append("Percentage calculations preserve the existing scale and observed cells. Marked values use percentage points; no implicit multiplication or division by 100 is performed.")
+    if kind == "currency" and base in ("mean", "median"):
+        parsed = {}
+        for index, value in original.loc[~source_mask].items():
+            try:
+                parsed[index] = parse_currency(value)
+            except ValueError as exc:
+                row = int(index) + 2 if isinstance(index, (int, np.integer)) else str(index)
+                raise ValueError(
+                    f"Column '{column}', spreadsheet row {row}, value {str(value)!r}: "
+                    "not a supported currency amount. Correct this cell or explicitly mark it as missing before calculating."
+                ) from exc
+        markers = {SYMBOL_CODES.get(marker, marker) for _, marker in parsed.values() if marker}
+        if len(markers) > 1:
+            raise ValueError("Mean/median cannot combine different or ambiguous currency labels. Standardize a single known currency first; no exchange-rate conversion is performed.")
+        amount_marker = next((marker for _, marker in parsed.values() if marker), None)
+        calculation = original.where(~source_mask).map(lambda value: None if missing(value) else float(parse_currency(value)[0]))
+        detail["warnings"].append("Calculations use numeric amounts in this column without currency conversion. Confirm that bare amounts and labelled amounts use the same currency. Observed cells are preserved.")
+    date_median = kind in ("date", "datetime") and base == "median"
+    parsed_dates = {}
+    date_format = "YYYY-MM-DD"
+    include_time = False
+    date_zone = None
+    if date_median:
+        sources = parameters.get("_source_formats", {})
+        formats = []
+        awareness = set()
+        for index, value in original.loc[~source_mask].items():
+            try:
+                parsed = parse_formatted_date(value, source_format=sources.get(int(index)))
+                if not isinstance(parsed, datetime): parsed = datetime.combine(parsed, datetime.min.time())
+            except (ValueError, TypeError, OverflowError) as exc:
+                raise ValueError(f"Column '{column}', spreadsheet row {int(index)+2}, value {str(value)!r}: resolve invalid or ambiguous dates before median imputation.") from exc
+            aware = parsed.utcoffset() is not None
+            awareness.add(aware)
+            if aware and date_zone is None: date_zone = parsed.tzinfo
+            include_time |= bool(parsed.time() != datetime.min.time() or re.search(r"[T ]\d{2}:\d{2}", str(value)))
+            parsed_dates[index] = parsed
+            pattern = sources.get(int(index)) or detect_date_pattern(value)
+            if pattern in DATE_OUTPUT_FORMATS: formats.append(pattern)
+        if len(awareness)>1: raise ValueError(f"Column '{column}': normalize mixed timezone-aware and timezone-naive dates before median imputation.")
+        if formats: date_format = Counter(formats).most_common(1)[0][0]
+        detail["date_output_format"] = date_format
+        detail["warnings"].append(f"Date median is an estimated chronological midpoint. Date-only rounding policy: {parameters.get('date_rounding', 'floor')}. Observed dates are unchanged. Mixed or month-name formats use a supported numeric format.")
+    if method in NUMERIC and not date_median:
         if not mask.all() and (
             kind
             in (
@@ -391,7 +522,6 @@ def impute_missing_values(df, column, method, parameters):
                 "boolean",
                 "date",
                 "datetime",
-                "currency",
                 "number_with_symbol",
             )
             or not numeric_candidate(original, kind)
@@ -399,10 +529,14 @@ def impute_missing_values(df, column, method, parameters):
             raise ValueError(
                 "Numeric imputation is limited to numeric measurements, not identifiers, currency labels, percentages, or mixed types. Review conversions first."
             )
-        for v in original.loc[~mask]:
-            number(
-                v
-            )  # Fail the entire operation if a dependency cannot be interpreted safely.
+        for index, value in calculation.loc[~source_mask].items():
+            try:
+                number(value)
+            except ValueError as exc:
+                row = int(index) + 2 if isinstance(index, (int, np.integer)) else str(index)
+                raise ValueError(
+                    f"Column '{column}', spreadsheet row {row}, value {str(original.loc[index])!r}: {exc}"
+                ) from exc
     groups = parameters.get("group_by", [])
     dependencies = groups + ([parameters["order_by"]] if method in ORDERED else [])
     if any(c not in df or c == column for c in dependencies):
@@ -451,25 +585,49 @@ def impute_missing_values(df, column, method, parameters):
             coordinates = coordinates.loc[indices]
         else:
             indices = part.index
-        series = original.loc[indices].astype(object).copy()
-        local_mask = mask.loc[indices]
-        series.loc[local_mask] = None
+        series = calculation.loc[indices].astype(object).copy()
+        local_mask = target_mask.loc[indices]
+        donor_mask = source_mask.loc[indices]
+        series.loc[donor_mask] = None
         if base in ("mean", "median", "mode", "constant"):
-            value = (
-                constant
-                if base == "constant"
-                else {"mean": fill_mean, "median": fill_median, "mode": fill_mode}[
-                    base
-                ](series)
-            )
+            if date_median:
+                observed = [parsed_dates[index] for index in indices if index in parsed_dates]
+                if not observed:
+                    empty_groups += 1
+                    continue
+                epoch = datetime(1,1,1,tzinfo=timezone.utc) if date_zone else datetime(1,1,1)
+                offsets = sorted(((value.astimezone(timezone.utc) if date_zone else value)-epoch)//timedelta(microseconds=1) for value in observed)
+                midpoint = (offsets[(len(offsets)-1)//2]+offsets[len(offsets)//2])//2
+                estimated = epoch+timedelta(microseconds=midpoint)
+                if date_zone: estimated = estimated.astimezone(date_zone)
+                if not include_time:
+                    rounding = parameters.get("date_rounding", "floor")
+                    if rounding not in ("floor","nearest","ceil"): raise ValueError("Choose floor, nearest or ceil for date rounding")
+                    midnight=estimated.replace(hour=0,minute=0,second=0,microsecond=0)
+                    remainder=estimated-midnight
+                    if (rounding=="ceil" and remainder>timedelta(0)) or (rounding=="nearest" and remainder>=timedelta(hours=12)):
+                        midnight += timedelta(days=1)
+                    estimated=midnight
+                    detail["date_rounding"]=rounding
+                value = render_date(estimated, date_format, include_time)
+            else:
+                value = (
+                    constant
+                    if base == "constant"
+                    else {"mean": fill_mean, "median": fill_median, "mode": fill_mode}[base](series)
+                )
             if value is None:
                 empty_groups += 1
                 continue
             if isinstance(value, float) and not math.isfinite(value):
                 raise ValueError("The estimated value is not finite")
+            if amount_marker and base in ("mean", "median"):
+                value = f"{amount_marker}{value:.15g}" if amount_marker in ("$", "€", "£", "¥") else f"{value:.15g} {amount_marker}"
+            elif percentage_marked and base in ("mean", "median"):
+                value = f"{value:.15g}%"
             filled.loc[indices[local_mask]] = value
         else:
-            observed_positions = np.flatnonzero(~local_mask.to_numpy())
+            observed_positions = np.flatnonzero(~donor_mask.to_numpy())
             if len(observed_positions) < (2 if base == "linear_interpolation" else 1):
                 empty_groups += 1
                 continue
@@ -494,22 +652,7 @@ def impute_missing_values(df, column, method, parameters):
             f"{empty_groups} groups/columns lacked sufficient observed values; those cells remain missing."
         )
     result[column] = filled
-    imputed = mask & ~filled.map(missing)
-    detail.update(
-        missing_after=int(filled.map(missing).sum()),
-        imputed_count=int(imputed.sum()),
-        imputed_cells=[
-            {
-                "row_index": scalar(i),
-                "spreadsheet_row": int(i) + 2
-                if isinstance(i, (int, np.integer))
-                else None,
-                "is_imputed": True,
-            }
-            for i in df.index[imputed]
-        ],
-        distribution_after=distribution(filled),
-    )
+    imputation_summary(original, filled, detail)
     if detail["missing_after"]:
         detail["warnings"].append(
             f"{detail['missing_after']} missing values remain. Boundary values are never extrapolated."

@@ -1,0 +1,36 @@
+.column-data-type-setting {
+  display: grid;
+  gap: 12px;
+  padding: 18px;
+  margin-bottom: 24px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-width: 0;
+}
+.column-data-type-setting p { margin: 0; }
+.column-data-type-setting small { display: block; line-height: 1.6; }
+.column-data-type-setting button { justify-self: start; }
+.original-colors-toggle {
+  display: inline-flex; align-items: center; gap: 8px;
+  white-space: normal; flex-shrink: 0;
+}
+.original-colors-toggle[aria-pressed="true"] { outline: 2px solid var(--primary, #217346); outline-offset: -2px; }
+.original-colors-note { font-size: 14px; line-height: 1.6; margin: 12px 0; max-width: 95ch; }
+.source-color-warning { display: inline-block; vertical-align: middle; flex-shrink: 0; margin-right: 7px; }
+.editor-table td.source-fill-cell em,
+.explore-preview-table td.source-fill-cell em { color: inherit; opacity: 1; }
+.source-fill-cell .issue-cell:hover { background: transparent; }
+.explore-preview-heading { flex-wrap: wrap; gap: 12px; }
+
+/* The tools stay in document flow; only table headings may be sticky. */
+.calm-workspace .sheet-toolbar { position: static; top: auto; z-index: auto; }
+.calm-workspace .sheet-toolbar-actions { align-items: center; gap: 6px 12px; padding: 8px 12px; }
+.calm-workspace .ribbon-group { flex-direction: row; align-items: center; margin: 0; padding: 0 10px 0 0; }
+.calm-workspace .ribbon-group-label { display: none; }
+.calm-workspace .ribbon-group-buttons { flex: 0 1 auto; align-items: center; gap: 4px; }
+.calm-workspace .ribbon-finish { margin-left: 0; }
+@media (max-width: 600px) {
+  .calm-workspace .sheet-toolbar-actions { display: flex; flex-wrap: wrap; }
+  .calm-workspace .ribbon-group { max-width: 100%; border-right: 0; padding: 0; }
+}
+.original-colors-note details { display: inline-block; margin-left: 12px; vertical-align: top; } .original-colors-note details[open] { display: block; margin: 8px 0 0; } .original-colors-note summary { cursor: pointer; }

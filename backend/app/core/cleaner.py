@@ -1,8 +1,12 @@
 import re
 
+from .data_formats import FORMAT_ACTIONS, normalize_format, expand_structured
+from .clock_time import normalize_clock_times
+from .negative_values import absolute_values
+from .duration import normalize_durations
 from .common import missing, numeric
 from .currency import normalize_currency, parse_currency
-from .date_analyzer import is_valid_date, parse_date
+from .date_analyzer import is_valid_date, parse_date, parse_formatted_date, render_date
 from .imputation import impute_missing_values
 from .percentage import normalize_percentage
 from .phone import normalize_phone
@@ -55,30 +59,27 @@ def normalize_numeric(series, settings):
     return series.map(convert)
 
 
-def normalize_boolean(series, mapping=None):
+def normalize_boolean(series, mapping=None, output="true_false"):
     mapping = mapping or BOOLEAN_MAP
-    return series.map(
-        lambda v: mapping.get(str(v).strip().lower(), v) if not missing(v) else v
-    )
+    def convert(value):
+        if missing(value): return value
+        normalized = mapping.get(str(value).strip().lower(), value)
+        if output == "yes_no" and isinstance(normalized, bool): return "Yes" if normalized else "No"
+        if output == "one_zero" and isinstance(normalized, bool): return "1" if normalized else "0"
+        return normalized
+    return series.map(convert)
 
 
 def normalize_dates(series, settings):
-    def convert(v):
-        if missing(v):
-            return v
+    known=settings.get("_source_formats", {})
+    def convert(index, value):
+        if missing(value): return value
         try:
-            parsed = parse_date(v, settings.get("interpretation"))
-            return (
-                parsed.isoformat()
-                if settings.get("include_time")
-                else parsed.date().isoformat()
-                if hasattr(parsed, "date")
-                else parsed.isoformat()
-            )
+            parsed=parse_formatted_date(value, settings.get("interpretation"), known.get(int(index)))
+            return render_date(parsed,settings.get("output_format","YYYY-MM-DD"),settings.get("include_time",False))
         except (ValueError, TypeError, OverflowError):
-            return v
-
-    return series.map(convert)
+            return value
+    return series.__class__([convert(index,value) for index,value in series.items()],index=series.index,name=series.name,dtype=object)
 
 
 def resolve_invalid_dates(series, settings):
@@ -131,7 +132,7 @@ def validate_imputation_approval(approved_plan):
             )
 
 
-def apply_cleaning_plan(df, approved_plan, require_approval=True):
+def apply_cleaning_plan(df, approved_plan, require_approval=True, progress=None):
     if require_approval:
         validate_imputation_approval(approved_plan)
     # Dependencies are run before imputation regardless of the submitted UI order.
@@ -160,6 +161,8 @@ def apply_cleaning_plan(df, approved_plan, require_approval=True):
     result = df.copy(deep=True)
     logs = []
     for op in ordered:
+        if progress:
+            progress(op)
         if not op.get("enabled", False):
             continue
         column, operation, settings = (
@@ -177,6 +180,10 @@ def apply_cleaning_plan(df, approved_plan, require_approval=True):
             except ValueError as exc:
                 raise ValueError(f"Imputation for {column}: {exc}") from exc
             modified = audit["imputed_count"]
+        elif operation == "expand_structured":
+            previous_columns=set(result.columns)
+            result=expand_structured(result,column,settings)
+            modified=sum(not missing(value) for name in result.columns if name not in previous_columns for value in result[name])
         elif operation == "remove_duplicates":
             result = remove_duplicates(result, settings.get("subset"))
             modified = 0
@@ -199,7 +206,10 @@ def apply_cleaning_plan(df, approved_plan, require_approval=True):
                     series, settings.get("strategy", "title")
                 ),
                 "normalize_numeric": lambda: normalize_numeric(series, settings),
-                "normalize_boolean": lambda: normalize_boolean(series),
+                "normalize_boolean": lambda: normalize_boolean(series, output=settings.get("format", "true_false")),
+                "normalize_time": lambda: normalize_clock_times(series, settings),
+                "absolute_values": lambda: absolute_values(series),
+                "normalize_duration": lambda: normalize_durations(series),
                 "normalize_dates": lambda: normalize_dates(series, settings),
                 "resolve_invalid_dates": lambda: resolve_invalid_dates(
                     series, settings
@@ -209,6 +219,7 @@ def apply_cleaning_plan(df, approved_plan, require_approval=True):
                 "normalize_symbols": lambda: normalize_symbols(series, settings),
                 "normalize_phone": lambda: normalize_phone(series, settings),
             }
+            functions.update({name: (lambda name=name: normalize_format(series,name,settings)) for name in FORMAT_ACTIONS})
             if operation not in functions:
                 raise ValueError("Unknown operation")
             changed = functions[operation]()

@@ -9,3 +9,4 @@ httpx==0.28.1
 pydantic==2.14.0
 starlette==1.7.0
 phonenumbers==9.0.41
+scikit-learn==1.9.1

@@ -17,6 +17,19 @@ def run(values, method, **parameters):
     return result["Amount"].tolist(), audit
 
 
+@pytest.mark.parametrize("method", ["mean", "median", "group_median"])
+def test_currency_error_identifies_original_row_column_and_value(method):
+    df = pd.DataFrame({"Salary": ["$100"] * 20 + [None, "USD ???"], "Department": ["IT"] * 22}, index=list(range(20)) + [50, 80])
+    original = df.copy(deep=True)
+    parameters = {"group_by": ["Department"]} if method == "group_median" else {}
+    with pytest.raises(ValueError) as error:
+        impute_missing_values(df, "Salary", method, parameters)
+    assert "Column 'Salary'" in str(error.value)
+    assert "spreadsheet row 82" in str(error.value)
+    assert "USD ???" in str(error.value)
+    pd.testing.assert_frame_equal(df, original)
+
+
 @pytest.mark.parametrize(
     "method,values,expected",
     [
@@ -56,6 +69,9 @@ def test_constant_types(values, value, expected):
 @pytest.mark.parametrize(
     "method,expected",
     [
+        ("mean", [10, 15, 20, 100, 100, None, None]),
+        ("median", [10, 15, 20, 100, 100, None, None]),
+        ("mode", [10, 10, 20, 100, 100, None, None]),
         ("group_mean", [10, 15, 20, 100, 100, None, None]),
         ("group_median", [10, 15, 20, 100, 100, None, None]),
         ("group_mode", [10, 10, 20, 100, 100, None, None]),
@@ -199,8 +215,7 @@ def test_invalid_parameters(method, parameters):
     "values",
     [
         ["10", "invalid", None],
-        ["$10", None, "$20"],
-        ["10%", None, "20%"],
+            ["10%", None, "0.2"],
         ["001", None, "002"],
         [True, None, False],
         [float("inf"), None, 20],
@@ -382,15 +397,19 @@ def test_existing_rename_then_transform_order_is_preserved_without_imputation():
     assert result.loc[0, "Label"] == "value"
 
 
-def test_salary_currency_exposes_numeric_methods_and_requires_conversion():
+def test_salary_currency_exposes_numeric_methods_without_conversion():
     df = pd.DataFrame({"Salary": ["$1,000", None, "$3,000"]}, dtype=object)
     report = profile_dataframe(df)["columns"][0]
     assert report["detected_type"] == "currency"
     assert {"mean", "median", "group_mean", "group_median"}.issubset(
         report["imputation"]["available_methods"]
     )
-    with pytest.raises(ValueError):
-        impute_missing_values(df, "Salary", "mean", {})
+    for method in ("mean", "median"):
+        result, detail = impute_missing_values(df, "Salary", method, {})
+        assert result["Salary"].tolist() == ["$1,000", "$2000", "$3,000"]
+        assert detail["imputed_count"] == 1
+    with pytest.raises(ValueError, match="currency"):
+        impute_missing_values(pd.DataFrame({"Salary": ["$100", None, "EUR 200"]}), "Salary", "mean", {})
     operations = [
         {
             "column": "Salary",

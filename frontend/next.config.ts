@@ -2,6 +2,7 @@ import type { NextConfig } from "next";
 const cloudflareExport = process.env.CLOUDFLARE_EXPORT === "1";
 const config: NextConfig = {
   allowedDevOrigins: ["127.0.0.1"],
+  experimental: { proxyTimeout: 180_000 },
   ...(cloudflareExport
     ? { output: "export" as const }
     : {

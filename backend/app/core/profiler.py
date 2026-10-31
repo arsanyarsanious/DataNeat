@@ -1,16 +1,29 @@
 import re
+import copy
 
-from .common import missing, scalar
+from .common import missing, scalar, ACTIVE_MARKERS, ACTIVE_SETTINGS, marker_set
 from .date_analyzer import analyze_date_column
 from .imputation import distribution, missing_pattern, recommendation
 from .issue_detector import detect_column_issues, detect_duplicates
-from .type_detector import detect_column_type
+from .type_detector import detect_column_type, declared_kind
 
 
 def profile_column(series):
+    settings = ACTIVE_SETTINGS.get().get(str(series.name), {})
+    token = ACTIVE_MARKERS.set(marker_set(settings.get("markers")))
+    try:
+        return _profile_column(series, settings)
+    finally:
+        ACTIVE_MARKERS.reset(token)
+
+
+def _profile_column(series, settings):
     values = [v for v in series if not missing(v)]
     count = len(series) - len(values)
     detected = detect_column_type(series)
+    if settings.get("type"):
+        from .workflow import matches_intent
+        detected = {"type": declared_kind(settings), "match_score": sum(matches_intent(v, settings) for v in values) / len(values) if values else 1.0}
     report = {
         "column_name": str(series.name),
         "total_rows": len(series),
@@ -22,6 +35,8 @@ def profile_column(series):
         "detected_type": detected["type"],
         "match_score": detected["match_score"],
         "issues": detect_column_issues(series, detected),
+        "markers": settings.get("markers"),
+        "intent": settings,
     }
     if count:
         report["imputation"] = recommendation(series, detected["type"])
@@ -49,8 +64,9 @@ def profile_column(series):
     return report
 
 
-def profile_dataframe(df):
-    columns = [profile_column(df[c]) for c in df.columns]
+def profile_dataframe(df, previous=None, changed_columns=None):
+    reusable = {c["column_name"]: c for c in (previous or {}).get("columns", [])}
+    columns = [copy.deepcopy(reusable[c]) if changed_columns is not None and c not in changed_columns and c in reusable else profile_column(df[c]) for c in df.columns]
     for target in columns:
         if not target.get("imputation"):
             continue
@@ -97,7 +113,8 @@ def profile_dataframe(df):
         target["imputation"]["contextual_recommendations"] = suggestions[:5]
     duplicates = detect_duplicates(df)
     missing_sets = {}
-    masks = {c: df[c].map(missing).to_numpy() for c in df.columns}
+    markers = {c: marker_set(ACTIVE_SETTINGS.get().get(str(c), {}).get("markers")) for c in df.columns}
+    masks = {c: df[c].map(lambda value: missing(value, markers[c])).to_numpy() for c in df.columns}
     for row in range(len(df)):
         pattern = tuple(str(c) for c in df.columns if masks[c][row])
         if pattern:

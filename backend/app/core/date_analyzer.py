@@ -13,6 +13,11 @@ def detect_date_pattern(value):
         r"\d{4}-\d{2}-\d{2}[T ].+", s
     ):
         return "ISO datetime"
+    if "T" in s:
+        head, _, tail = s.partition("T")
+        if tail and re.fullmatch(r"\d{1,4}[-/]\d{1,2}[-/]\d{2,4}",head):
+            pattern=detect_date_pattern(head)
+            if pattern:return pattern+" datetime"
     match = re.fullmatch(r"(\d{1,4})([-/])(\d{1,2})\2(\d{2,4})", s)
     if match:
         a, sep, b, c = match.groups()
@@ -44,6 +49,10 @@ def parse_date(value, interpretation=None):
     pattern = detect_date_pattern(s)
     if pattern == "ISO datetime":
         return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    if pattern and pattern.endswith(" datetime"):
+        head, _, tail=s.partition("T")
+        parsed=parse_date(head,interpretation)
+        return datetime.fromisoformat(parsed.date().isoformat()+"T"+tail)
     if pattern == "Month-name formats":
         for fmt in MONTH_FORMATS:
             try:
@@ -70,6 +79,8 @@ def parse_date(value, interpretation=None):
 
 
 def is_ambiguous_numeric_date(value):
+    if isinstance(value,str) and "T" in value:
+        return is_ambiguous_numeric_date(value.partition("T")[0])
     pattern = detect_date_pattern(value)
     if not pattern or "_or_" not in pattern:
         return False
@@ -124,3 +135,24 @@ def analyze_date_column(series):
         if mm and not dd
         else None,
     }
+
+
+DATE_OUTPUT_FORMATS = {
+    "YYYY-MM-DD":"%Y-%m-%d", "DD/MM/YYYY":"%d/%m/%Y",
+    "MM/DD/YYYY":"%m/%d/%Y", "YYYY/MM/DD":"%Y/%m/%d",
+    "DD-MM-YYYY":"%d-%m-%Y", "MM-DD-YYYY":"%m-%d-%Y",
+}
+
+def parse_formatted_date(value, interpretation=None, source_format=None):
+    if source_format and isinstance(value, str):
+        pattern=DATE_OUTPUT_FORMATS[source_format]
+        head, separator, tail=value.partition("T")
+        parsed=datetime.strptime(head,pattern)
+        return datetime.fromisoformat(parsed.date().isoformat()+"T"+tail) if separator else parsed
+    return parse_date(value, interpretation)
+
+def render_date(parsed, output_format="YYYY-MM-DD", include_time=False):
+    if output_format == "YYYY-MM-DD":
+        return parsed.isoformat() if include_time else parsed.date().isoformat() if hasattr(parsed,"date") else parsed.isoformat()
+    text=parsed.strftime(DATE_OUTPUT_FORMATS[output_format])
+    return text+"T"+parsed.timetz().isoformat() if include_time and isinstance(parsed,datetime) else text

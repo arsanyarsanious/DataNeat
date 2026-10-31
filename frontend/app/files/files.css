@@ -1,0 +1,70 @@
+.account-file-controls { min-width: 0; max-width: 100%; color: var(--text); }
+.account-file-storage-row { display: flex; align-items: center; flex-wrap: wrap; gap: 7px 12px; min-width: 0; }
+.account-file-storage-state, .account-file-storage-row > a { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; line-height: 1.5; }
+.account-file-storage-state { color: var(--muted); }
+.account-file-storage-state.saved, .account-file-storage-row > a { color: var(--green); }
+.account-file-controls .account-file-save { display: inline-flex; align-items: center; gap: 6px; min-height: 29px; font-size: 11px; padding: 5px 9px; }
+.account-file-text-button { font: inherit; font-size: 11px; background: none; border: 0; padding: 3px 0; color: var(--green); cursor: pointer; }
+.account-file-text-button:hover { text-decoration: underline; }
+.account-file-text-button:disabled { cursor: default; opacity: .55; }
+.account-file-hint { font-size: 10px; line-height: 1.65; margin: 5px 0 0; color: var(--muted); max-width: 650px; overflow-wrap: break-word; }
+.account-file-hint a { color: var(--green); text-decoration: underline; }
+.account-file-confirm { border: 1px solid var(--border); background: var(--surface); border-radius: 7px; padding: 10px 12px; margin-top: 7px; font-size: 11px; }
+.account-file-confirm p { font-size: 11px; margin: 0 0 8px; color: var(--text); }
+.account-file-confirm > div { display: flex; flex-wrap: wrap; gap: 7px; }
+.account-file-confirm .button { min-height: 28px; font-size: 11px; padding: 5px 9px; }
+.account-file-error { padding: 11px 13px; border: 1px solid #d77979; border-radius: 7px; color: #a52626; background: #fff1f1; font-size: 12px; line-height: 1.7; margin-top: 10px; overflow-wrap: break-word; }
+.account-file-error p { margin: 0 0 7px; color: inherit; font-size: inherit; }
+.dark .account-file-error { color: #ffb4b4; background: #462a2a; border-color: #a55353; }
+.files-shell .files-topbar { min-height: 60px; height: auto; gap: 16px; padding: 14px 32px; }
+.files-topbar .button { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; }
+.account-files-page { max-width: 1180px; width: 100%; min-width: 0; margin: 0 auto; padding: 38px 32px 50px; }
+.account-files-intro { max-width: 720px; }
+.account-files-intro .eyebrow { display: inline-flex; align-items: center; gap: 7px; font-size: 10px; letter-spacing: 1.2px; color: var(--green); }
+.account-files-intro h1 { margin: 12px 0 9px; font-size: clamp(27px, 3vw, 36px); letter-spacing: -.8px; line-height: 1.2; }
+.account-files-intro > p { color: var(--muted); font-size: 13px; line-height: 1.8; margin: 0 0 9px; }
+.account-files-intro .account-files-email { font-size: 11px; overflow-wrap: anywhere; }
+.account-files-email strong { color: var(--text); font-weight: 500; }
+.account-files-tools { margin: 26px 0 12px; max-width: 680px; }
+.account-files-tools > label { display: block; font-size: 12px; font-weight: 600; margin-bottom: 7px; }
+.account-files-search { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border); border-radius: 8px; padding: 0 13px; background: var(--surface); color: var(--muted); }
+.account-files-search:focus-within { outline: 2px solid var(--green); outline-offset: 2px; }
+.account-files-search input { height: 42px; min-width: 0; width: 100%; background: transparent; color: var(--text); border: 0; outline: none; font-size: 12px; padding: 0; }
+.account-files-count { display: flex; align-items: center; gap: 15px; font-size: 11px; color: var(--muted); margin-top: 5px; }
+.account-files-page .account-files-retention { color: var(--muted); font-size: 11px; line-height: 1.8; margin-bottom: 22px; }
+.account-files-quota { display: block; margin-top: 4px; }
+.account-files-state { display: flex; flex-direction: column; align-items: flex-start; gap: 13px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 26px; margin-top: 25px; max-width: 800px; }
+.account-files-state > svg { color: var(--green); }
+.account-files-state h2 { font-size: 18px; line-height: 1.45; margin: 0; }
+.account-files-state p { max-width: 640px; color: var(--muted); font-size: 12px; line-height: 1.8; margin: 0; }
+.account-files-state > div { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 18px; }
+.account-files-state a { font-size: 12px; }
+.account-files-list { display: flex; flex-direction: column; gap: 13px; min-width: 0; }
+.account-saved-file { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 17px 22px; border: 1px solid var(--border); background: var(--surface); padding: 20px; border-radius: 10px; min-width: 0; }
+.account-saved-file-main { display: flex; align-items: flex-start; gap: 13px; min-width: 0; }
+.account-saved-file-main > div { min-width: 0; }
+.account-saved-file-icon { display: grid; place-items: center; width: 38px; height: 38px; background: var(--green-light); color: var(--green); border-radius: 8px; flex: 0 0 38px; }
+.account-saved-file h2 { font-size: 14px; font-weight: 600; line-height: 1.6; margin: 0 0 4px; overflow-wrap: anywhere; }
+.account-saved-file p { margin: 0; font-size: 11px; color: var(--muted); line-height: 1.8; overflow-wrap: anywhere; }
+.account-saved-file-actions { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.account-saved-file-actions .button { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; min-height: 31px; padding: 6px 9px; }
+.account-file-inline-form, .account-file-delete-confirm { grid-column: 1 / -1; border-top: 1px solid var(--border); padding-top: 15px; min-width: 0; }
+.account-file-inline-form label { display: flex; flex-direction: column; gap: 6px; font-size: 11px; max-width: 520px; }
+.account-file-inline-form input { min-width: 0; width: 100%; height: 37px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); padding: 7px 10px; font-size: 12px; }
+.account-file-inline-form > div, .account-file-delete-confirm > div { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.account-file-inline-form .button, .account-file-delete-confirm .button { font-size: 11px; padding: 6px 10px; }
+.account-file-delete-confirm p { color: var(--text); font-size: 12px; }
+.account-saved-file .account-file-danger { background: #a63131; border-color: #a63131; color: white; }
+.account-files-message { color: var(--green); font-size: 12px; margin-top: 15px; }
+@media (max-width: 1100px) { .account-saved-file { grid-template-columns: minmax(0, 1fr); } .account-saved-file-actions { margin-left: 51px; } }
+@media (max-width: 600px) {
+  .files-shell .files-topbar { padding: 12px 16px; flex-wrap: wrap; gap: 9px; }
+  .files-topbar .button { font-size: 10px; padding: 6px 8px; }
+  .account-files-page { padding: 26px 16px 36px; }
+  .account-files-state { padding: 20px 17px; }
+  .account-saved-file { padding: 16px; gap: 15px; }
+  .account-saved-file-main { gap: 10px; }
+  .account-saved-file-actions { margin-left: 0; }
+  .account-saved-file-actions .button { font-size: 10px; }
+  .account-file-storage-row { gap: 7px 9px; }
+}

@@ -39,6 +39,13 @@ export type Issue = {
   conflicting_categories?: number;
   formats?: Record<string, number>;
   country_codes?: Record<string, number>;
+  row_indices?: number[];
+};
+export type ImputationReadiness = {
+  ready: boolean;
+  blocking_count: number;
+  blocking_issues: { kind: string; label: string; count: number; example_rows: number[] }[];
+  message: string;
 };
 export type DateAnalysis = {
   patterns: Record<string, number>;
@@ -53,6 +60,7 @@ export type DateAnalysis = {
 };
 export type Column = {
   column_name: string;
+  intent?: {allow_negative?:boolean;[key:string]:unknown};
   detected_type: string;
   match_score: number;
   total_rows: number;
@@ -62,8 +70,10 @@ export type Column = {
   pandas_dtype: string;
   sample_values: unknown[];
   issues: Issue[];
+  missing_marker_review?: {count:number;examples:string[]};
   date_analysis?: DateAnalysis;
   imputation?: ImputationRecommendation;
+  imputation_readiness?: ImputationReadiness;
 };
 export type Profile = {
   rows: number;
@@ -73,7 +83,15 @@ export type Profile = {
   issue_count: number;
   columns: Column[];
 };
+export type OriginalColorsStatus = {
+  supported: boolean;
+  status: "off" | "ready" | "unavailable" | "unsupported";
+  has_colors?: boolean;
+  message: string;
+  limitations: string[];
+};
 export type Preview = {
+  original_fills?: (string | null)[][];
   is_imputed?: boolean[][];
   columns: string[];
   rows: unknown[][];
@@ -97,7 +115,10 @@ export type Operation = {
 export type Upload = {
   file_id: string;
   filename: string;
+  storage?: {saved:boolean;saved_name?:string;expires_at?:number|null};
   metadata: {
+    formula_notice?: string | null;
+    formula_cells?: number;
     sheets: string[];
     worksheet?: string;
     encoding?: string;
@@ -161,7 +182,19 @@ export async function api<T>(path: string, init?: RequestInit): Promise<T> {
     ...init,
     credentials: "same-origin",
   });
-  const body = await response.json();
+  const text = await response.text();
+  let body;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    throw new Error(
+      response.ok
+        ? "The server returned an unreadable response. Please retry."
+        : response.status === 504 || response.status === 502
+          ? "The server took too long to respond. Please retry; your original file is preserved."
+          : `The server could not complete the request (${response.status}). Please retry; your original file is preserved.`,
+    );
+  }
   if (!response.ok) {
     const message =
       typeof body.detail === "string"
@@ -186,10 +219,10 @@ export type InvalidDateRows = {
 };
 
 // Share one bootstrap request so simultaneous first requests cannot replace the session cookie.
-let sessionBootstrap: Promise<{ max_upload_mb: number }> | null = null;
+let sessionBootstrap: Promise<{ max_upload_mb: number; max_rows: number; max_columns: number }> | null = null;
 export function initializeSession() {
   if (!sessionBootstrap)
-    sessionBootstrap = api<{ max_upload_mb: number }>("/health").catch(
+    sessionBootstrap = api<{ max_upload_mb: number; max_rows: number; max_columns: number }>("/health").catch(
       (error) => {
         sessionBootstrap = null;
         throw error;

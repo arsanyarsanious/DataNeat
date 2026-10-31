@@ -1,6 +1,9 @@
 import re
 
-from .common import missing, numeric
+from .semantic_types import detect_semantic
+from .clock_time import is_clock_time
+from .duration import is_duration
+from .common import missing, numeric, ACTIVE_SETTINGS
 from .currency import currency_marker, parse_currency
 from .date_analyzer import detect_date_pattern, is_valid_date
 from .percentage import parse_percentage
@@ -49,7 +52,15 @@ def is_date(value):
     return is_valid_date(value)
 
 
+def declared_kind(settings):
+    kind = settings.get("type", "")
+    return {"numeric": "decimal", "salary": "decimal", "location": "category"}.get(kind, kind)
+
+
 def detect_column_type(series, threshold=0.8):
+    settings = ACTIVE_SETTINGS.get().get(str(series.name), {})
+    if settings.get("type"):
+        return {"type": declared_kind(settings), "match_score": 1.0}
     values = [v for v in series if not missing(v)]
     if not values:
         return {"type": "unknown", "match_score": 0.0}
@@ -78,12 +89,23 @@ def detect_column_type(series, threshold=0.8):
             "type": "phone",
             "match_score": round(international_count / len(values), 4),
         }
+    duration_context = bool(re.search(r"duration|elapsed|time_taken|processing_time", name))
+    duration_score = sum(is_duration(v) for v in values) / len(values)
+    explicit_duration = any(re.match(r"^P(?:T|\d)", s, re.I) or re.search(r"\d\s*(?:min(?:utes?)?|hrs?|hours?|sec(?:onds?)?)$", s, re.I) for s in strings)
+    if (duration_context or explicit_duration) and duration_score >= (0.5 if duration_context else threshold):
+        return {"type": "duration", "match_score": round(duration_score, 4)}
+    clock_score = sum(is_clock_time(v) for v in values) / len(values)
+    clock_context = bool(re.search(r"time|shift|clock", name)) and not duration_context
+    if not duration_context and clock_score >= (0.5 if clock_context else threshold):
+        return {"type": "time", "match_score": round(clock_score, 4)}
+    semantic = detect_semantic(series, threshold)
+    if semantic: return semantic
     # Recognize the structure even when every date is impossible (e.g. 88-99-2089).
     date_shapes = sum(bool(detect_date_pattern(v)) for v in values) / len(values)
     if date_shapes >= threshold:
         kind = (
             "datetime"
-            if all(detect_date_pattern(v) == "ISO datetime" for v in values)
+            if all(str(detect_date_pattern(v)).endswith("datetime") for v in values)
             else "date"
         )
         return {
@@ -141,7 +163,7 @@ def detect_column_type(series, threshold=0.8):
     checks += [
         ("currency", lambda v: bool(re.match(r"^\s*[\$€£]", str(v))) and is_decimal(v)),
         ("percentage", lambda v: str(v).strip().endswith("%") and is_decimal(v)),
-        ("datetime", lambda v: detect_date_pattern(v) == "ISO datetime" and is_date(v)),
+        ("datetime", lambda v: str(detect_date_pattern(v)).endswith("datetime") and is_date(v)),
         ("date", is_date),
         ("integer", is_integer),
         ("decimal", is_decimal),

@@ -1,0 +1,10 @@
+/* Scoped brand artwork: leaves spreadsheet and workflow styles untouched. */
+.dataneat-mark { display: block; flex: 0 0 auto; overflow: visible; }
+.dataneat-mark-cell { fill: #217346; }
+.dataneat-mark-arm { fill: #38a96c; }
+.dataneat-mark-tip { fill: #8dddb1; }
+.dark .dataneat-mark-cell { fill: #27985c; }
+.dark .dataneat-mark-arm { fill: #67d79c; }
+.dark .dataneat-mark-tip { fill: #b9f4d2; }
+.welcome-brand > .dataneat-brand-symbol { background: transparent; border-radius: 0; box-shadow: none; }
+.access-brand > .dataneat-mark { overflow: visible; }

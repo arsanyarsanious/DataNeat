@@ -4,20 +4,23 @@ import type { Operation } from "@/lib/types";
 import { Button } from "./ui/button";
 export function PlanSelection({
   operations,
+  reviewedIds,
   disabled,
   onSelect,
 }: {
   operations: Operation[];
+  reviewedIds: Set<string>;
   disabled: boolean;
   onSelect: (enabled: boolean) => void;
 }) {
+  const eligible = operations.filter(o => reviewedIds.has(o.id));
   const selected = operations.filter((o) => o.enabled).length,
     ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (ref.current)
-      ref.current.indeterminate = selected > 0 && selected < operations.length;
-  }, [selected, operations.length]);
-  const destructive = operations.filter(
+      ref.current.indeterminate = selected > 0 && selected < eligible.length;
+  }, [selected, eligible.length]);
+  const destructive = eligible.filter(
     (o) => o.safety === "destructive",
   ).length;
   return (
@@ -27,12 +30,12 @@ export function PlanSelection({
           <input
             ref={ref}
             type="checkbox"
-            aria-label="Select all cleaning actions"
-            checked={operations.length > 0 && selected === operations.length}
-            disabled={disabled || operations.length === 0}
+            aria-label="Select all reviewed cleaning actions"
+            checked={eligible.length > 0 && eligible.every(o => o.enabled)}
+            disabled={disabled || eligible.length === 0}
             onChange={(e) => onSelect(e.target.checked)}
           />
-          Select all
+          Select all reviewed
         </label>
         <Button
           variant="outline"
@@ -47,7 +50,7 @@ export function PlanSelection({
         </span>
       </div>
       <p>
-        Select all enables every suggestion
+        Open Show details before selecting an action. Select all reviewed enables only the {eligible.length} actions whose details you have viewed
         {destructive
           ? `, including ${destructive} action${destructive === 1 ? "" : "s"} that ${destructive === 1 ? "removes" : "remove"} rows`
           : ""}

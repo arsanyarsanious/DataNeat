@@ -1,0 +1,161 @@
+/* Workbook ribbon: existing actions, grouped without hiding any controls. */
+.calm-workspace .sheet-toolbar {
+  display: block;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: 0 2px 8px #172c1e04;
+}
+.ribbon-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--soft);
+  border-radius: 9px 9px 0 0;
+}
+.ribbon-title { font-size: 11px; font-weight: 700; letter-spacing: .2px; white-space: nowrap; }
+.ribbon-heading .overview-button { font-size: 11px; line-height: 1.5; padding: 0; text-align: right; }
+.ribbon-heading .overview-button:hover { color: var(--green); }
+.ribbon-heading-actions { display: flex; align-items: center; justify-content: flex-end; gap: 12px; min-width: 0; flex-wrap: wrap; }
+.calm-workspace .ribbon-heading .ribbon-automatic { min-height: 30px; padding: 6px 10px; font-size: 11px; line-height: 1.5; white-space: nowrap; background: var(--green-light); border-color: color-mix(in srgb, var(--green) 35%, var(--border)); color: var(--text); }
+.calm-workspace .sheet-toolbar-actions { display: flex; gap: 0; padding: 8px; align-items: stretch; }
+.ribbon-group { display: flex; flex-direction: column; gap: 5px; padding: 0 10px; border-right: 1px solid var(--border); min-width: 0; }
+.ribbon-group:first-child { padding-left: 0; }
+.ribbon-group:last-child { border: 0; padding-right: 0; }
+.ribbon-group-buttons { display: flex; gap: 3px; align-items: stretch; flex: 1; }
+.calm-workspace .ribbon-group .button { min-height: 34px; padding: 7px 9px; border: 1px solid transparent; font-size: 12px; gap: 6px; line-height: 1.4; white-space: nowrap; }
+.calm-workspace .ribbon-group .button.ghost { background: transparent; color: var(--text); }
+.calm-workspace .ribbon-group .button.ghost:hover:not(:disabled),
+.calm-workspace .ribbon-group .button[aria-pressed=true] { background: var(--green-light); color: var(--text); border-color: color-mix(in srgb, var(--green) 28%, var(--border)); }
+.ribbon-group-label { font-size: 10px; line-height: 1.2; color: var(--muted); text-align: center; }
+.ribbon-finish { margin-left: auto; }
+.ribbon-finish .button.primary { border-color: #217346; }
+/* Keep feedback in a reserved line so a correction never shifts the sheet. */
+.flow-clean .workspace-job-slot { min-height: 50px; }
+.flow-clean .cleaning-success { padding: 7px 12px; min-height: 42px; }
+.flow-clean .workspace-job-status > .cleaning-progress { padding: 7px 12px; }
+.flow-clean .workspace-job-slot:has(.workspace-job-status) { padding: 0; }
+
+/* Download cards keep each format, explanation and ready file together. */
+.flow-results .result-downloads { padding: 24px; background: var(--surface); }
+.download-section-heading { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 22px; }
+.download-section-heading h3 { font-size: 20px; margin: 0 0 7px; }
+.download-section-heading p { margin: 0; font-size: 13px; }
+.download-revision { color: var(--muted); font-size: 11px; line-height: 1.6; padding: 6px 9px; border: 1px solid var(--border); border-radius: 6px; background: var(--soft); }
+.download-format-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.download-format-card { padding: 20px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); display: flex; flex-direction: column; min-width: 0; }
+.download-format-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 20px; }
+.download-format-icon { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; border-radius: 10px; background: #eaf3ee; color: #217346; }
+.download-format-csv .download-format-icon { color: #356a98; background: #edf3fa; }
+.download-format-report .download-format-icon { color: #8a5d33; background: #faf0e5; }
+.download-extension { font-size: 10px; color: var(--muted); letter-spacing: .7px; font-weight: 700; }
+.download-format-card h4 { margin: 0 0 8px; font-size: 16px; line-height: 1.4; }
+.download-format-card > p { font-size: 12px; line-height: 1.7; margin: 0 0 22px; }
+.download-format-actions { display: grid; gap: 8px; margin-top: auto; }
+.download-format-actions .button { width: 100%; font-size: 12px; line-height: 1.5; padding: 9px 12px; min-height: 39px; }
+.download-format-actions a { text-align: center; }
+.download-format-actions a span { min-width: 0; overflow-wrap: anywhere; }
+.dark .download-format-card { background: var(--soft); }
+.dark .download-format-icon { background: #294237; color: #9cdbb5; }
+.dark .download-format-csv .download-format-icon { background: #2d3c49; color: #b2d2ed; }
+.dark .download-format-report .download-format-icon { background: #453a2f; color: #e7c79e; }
+
+/* Compact missing-label notice, with space between its text and rounded frame. */
+.workspace-drawer .marker-review.panel {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 14px;
+  font-size: 12px;
+  line-height: 1.6;
+  word-break: normal;
+  overflow-wrap: break-word;
+}
+.workspace-drawer .marker-review > strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.workspace-drawer .marker-review > p {
+  font-size: 12px;
+  line-height: 1.65;
+  margin: 8px 0 10px;
+}
+.workspace-drawer .marker-review > details {
+  min-width: 0;
+  max-width: 100%;
+  overflow: visible;
+}
+.workspace-drawer .marker-review summary {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.workspace-drawer .marker-review-column { grid-template-columns: minmax(0, 1fr); min-width: 0; padding: 10px 0; font-size: 12px; }
+.workspace-drawer .marker-review-column > strong { min-width: 0; overflow-wrap: anywhere; }
+.workspace-drawer .marker-review-column:first-of-type { margin-top: 10px; }
+.workspace-drawer .marker-review-column .button {
+  min-width: 0;
+  width: 100%;
+  min-height: 34px;
+  padding: 7px 9px;
+  font-size: 11px;
+  line-height: 1.5;
+  white-space: normal;
+}
+/* History needs the same safe inset as other framed drawer messages. */
+.workspace-drawer .cleaning-history.panel {
+  min-width: 0;
+  width: 100%;
+  padding: 12px 14px;
+  overflow-wrap: break-word;
+}
+.workspace-drawer .cleaning-history .history-actions {
+  min-width: 0;
+  grid-template-columns: minmax(0, 1fr);
+  margin: 0 0 12px;
+}
+.workspace-drawer .cleaning-history > p,
+.workspace-drawer .cleaning-history > small {
+  display: block;
+  font-size: 11px;
+  line-height: 1.65;
+  margin: 10px 0;
+}
+.workspace-drawer .cleaning-history > small:last-child { margin-bottom: 0; }
+.workspace-drawer .cleaning-history ol { min-width: 0; margin: 12px 0; }
+.workspace-drawer .cleaning-history li { min-width: 0; gap: 8px; padding: 10px 0; }
+.workspace-drawer .history-step > summary { gap: 8px; }
+.workspace-drawer .history-step-number { width: 22px; height: 22px; flex-basis: 22px; }
+.workspace-drawer .history-step-details { min-width: 0; padding: 10px 0 0 30px; }
+.workspace-drawer .history-step-details p { font-size: 11px; line-height: 1.65; overflow-wrap: anywhere; }
+@media (max-width: 1250px) {
+  .ribbon-group { padding-inline: 7px; }
+  .calm-workspace .ribbon-group .button { padding-inline: 7px; font-size: 11px; }
+}
+@media (max-width: 850px) {
+  .calm-workspace .sheet-toolbar-actions { flex-wrap: wrap; row-gap: 12px; }
+  .ribbon-group { padding-inline: 10px; }
+  .ribbon-finish { margin-left: 0; }
+  .download-format-cards { gap: 10px; }
+  .download-format-card { padding: 15px; }
+}
+@media (max-width: 600px) {
+  .ribbon-heading { align-items: flex-start; gap: 10px; padding: 9px 10px; }
+  .ribbon-heading-actions { flex-direction: column; align-items: flex-end; gap: 8px; }
+  .ribbon-heading-actions .ribbon-automatic { order: -1; }
+  .ribbon-heading .overview-button { max-width: 210px; }
+  .calm-workspace .sheet-toolbar-actions { display: grid; grid-template-columns: minmax(0,1fr); gap: 8px; padding: 10px; }
+  .ribbon-group, .ribbon-group:first-child, .ribbon-group:last-child { flex-direction: row; align-items: center; gap: 8px; border: 0; padding: 0; }
+  .ribbon-group-label { order: -1; flex: 0 0 70px; text-align: left; }
+  .ribbon-group-buttons { flex-wrap: wrap; }
+  .calm-workspace .ribbon-group .button { font-size: 11px; padding: 7px; white-space: normal; }
+  .flow-results .result-downloads { padding: 18px; }
+  .download-format-cards { grid-template-columns: minmax(0,1fr); }
+  .download-format-card { padding: 18px; }
+  .download-format-top { margin-bottom: 14px; }
+  .download-format-card > p { margin-bottom: 16px; }
+}

@@ -3,6 +3,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
+from ..core.data_formats import FORMAT_ACTIONS, validate_format_settings
 from ..core.currency import CURRENCY_CODES
 from ..core.date_analyzer import is_valid_date
 from ..core.imputation import validate_parameters
@@ -19,6 +20,11 @@ class Operation(BaseModel):
         "normalize_numeric",
         "normalize_boolean",
         "normalize_dates",
+        "normalize_duration",
+        "normalize_time",
+        "absolute_values",
+        "normalize_number_format", "convert_units", "convert_numeric_dates", "convert_timezone",
+        "normalize_structured", "expand_structured", "normalize_coordinates", "normalize_url", "normalize_ip",
         "resolve_invalid_dates",
         "normalize_currency",
         "normalize_percentage",
@@ -36,13 +42,21 @@ class Operation(BaseModel):
         if self.operation != "remove_duplicates" and not self.column:
             raise ValueError("This operation requires a column")
         settings = self.parameters
+        if self.operation in FORMAT_ACTIONS | {"expand_structured"}: validate_format_settings(self.operation,settings)
         if self.operation == "impute_missing_values" and self.enabled:
             validate_parameters(settings.get("method", "preserve"), settings)
+        if self.operation == "normalize_boolean" and settings.get("format", "true_false") not in ("true_false", "yes_no", "one_zero"):
+            raise ValueError("Choose true/false, Yes/No, or 1/0 boolean labels")
         if self.operation == "normalize_capitalization" and settings.get(
             "strategy", "title"
         ) not in ("lower", "upper", "title"):
             raise ValueError("Choose lower, upper, or title capitalization")
+        if self.operation == "normalize_time" and settings.get("format", "24_hour") not in ("24_hour", "12_hour"):
+            raise ValueError("Choose 24_hour or 12_hour clock format")
         if self.operation == "normalize_dates":
+            from ..core.date_analyzer import DATE_OUTPUT_FORMATS
+            if not isinstance(settings.get("output_format", "YYYY-MM-DD"), str) or settings.get("output_format", "YYYY-MM-DD") not in DATE_OUTPUT_FORMATS:
+                raise ValueError("Choose a supported date output format")
             if settings.get("interpretation", "preserve") not in (
                 "preserve",
                 "day_first",
@@ -213,11 +227,16 @@ class EditorRequest(BaseModel):
     revision: int = Field(ge=0)
     column: str = Field(min_length=1, max_length=512)
     row_index: int = Field(ge=0)
-    scope: Literal["cell", "column"] = "cell"
+    scope: Literal["cell", "column", "matching", "invalid_dates", "issue", "issue_columns", "values"] = "cell"
     action: Literal[
         "replace",
         "trim_whitespace",
         "normalize_dates",
+        "normalize_duration",
+        "normalize_time",
+        "absolute_values",
+        "normalize_number_format", "convert_units", "convert_numeric_dates", "convert_timezone",
+        "normalize_structured", "expand_structured", "normalize_coordinates", "normalize_url", "normalize_ip",
         "normalize_boolean",
         "normalize_numeric",
         "normalize_capitalization",
@@ -227,6 +246,7 @@ class EditorRequest(BaseModel):
         "normalize_phone",
         "impute_missing_values",
         "remove_duplicates",
+        "resolve_invalid_dates",
     ]
     parameters: dict[str, Any] = Field(default_factory=dict)
     value: str | float | bool | None = None
@@ -234,6 +254,15 @@ class EditorRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_action(self):
+        if self.scope in ("matching", "invalid_dates", "issue", "issue_columns", "values") and self.action != "replace":
+            raise ValueError("Matching-value scope is available for manual replacements only")
+        if self.scope == "issue_columns":
+            columns = self.parameters.get("columns")
+            kind = self.parameters.get("issue_kind")
+            if not isinstance(columns, list) or not 1 <= len(columns) <= 200 or any(not isinstance(name, str) or not name for name in columns) or len(set(columns)) != len(columns) or self.column not in columns:
+                raise ValueError("Select the affected columns, including the current column")
+            if not isinstance(kind, str) or not re.fullmatch(r"[a-z_]{1,80}", kind):
+                raise ValueError("Select one issue type")
         if self.action != "replace":
             Operation(
                 column=self.column,
@@ -243,4 +272,10 @@ class EditorRequest(BaseModel):
             )
         if isinstance(self.value, str) and len(self.value) > 10000:
             raise ValueError("Replacement value is too long")
+        if self.scope == "values":
+            sources = self.parameters.get("source_values")
+            if not isinstance(sources, list) or not 2 <= len(sources) <= 1000 or any(not isinstance(v, str) or not v.strip() or len(v) > 10000 for v in sources):
+                raise ValueError("Select between 2 and 1000 nonempty text values")
+            if len(set(sources)) != len(sources) or not isinstance(self.value, str) or not self.value.strip():
+                raise ValueError("Select distinct source values and enter the final text")
         return self

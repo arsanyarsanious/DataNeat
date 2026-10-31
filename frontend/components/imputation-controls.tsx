@@ -1,6 +1,23 @@
+import { DateMedianNotice } from "./date-median-notice";
 import type { Column, Operation } from "@/lib/types";
+import { imputationMethod, imputationMethods } from "@/lib/imputation-methods";
+import { getImputationReadiness } from "@/lib/imputation-readiness";
+
+export function ImputationReadinessNotice({ column }: { column?: Column }) {
+  const readiness = getImputationReadiness(column);
+  if (readiness.ready) return null;
+  return <div className="blocking-action-error" role="alert"><div>
+    <strong>Resolve other issues before filling missing values</strong>
+    <p>{readiness.message}</p>
+    {readiness.blocking_issues.length > 0 && <ul>{readiness.blocking_issues.map(issue => <li key={issue.kind}>
+      {issue.label}: {issue.count.toLocaleString()}{issue.example_rows.length ? ` · Spreadsheet rows ${issue.example_rows.slice(0, 3).join(", ")}` : ""}
+    </li>)}</ul>}
+    <p>Correct, clear or explicitly accept the remaining issues, then return here. Leaving missing values unchanged is still available.</p>
+  </div></div>;
+}
 
 const names: Record<string, string> = {
+  date_sequence: "Date pattern — complete a regular sequence",
   preserve: "Leave missing values unchanged",
   mean: "Mean",
   median: "Median",
@@ -9,9 +26,6 @@ const names: Record<string, string> = {
   forward_fill: "Forward fill",
   backward_fill: "Backward fill",
   linear_interpolation: "Linear interpolation",
-  group_mean: "Group mean",
-  group_median: "Group median",
-  group_mode: "Group mode",
   group_forward_fill: "Group forward fill",
   group_backward_fill: "Group backward fill",
 };
@@ -28,9 +42,12 @@ export function ImputationControls({
 }) {
   const column = columns.find((c) => c.column_name === operation.column);
   const info = column?.imputation;
-  const method = String(operation.parameters.method || "preserve");
+  const readiness = getImputationReadiness(column);
+  const controlsDisabled = disabled || !readiness.ready;
+  const method = imputationMethod(String(operation.parameters.method || "preserve"));
   const groups = (operation.parameters.group_by || []) as string[];
   const ordered = [
+    "date_sequence",
     "forward_fill",
     "backward_fill",
     "linear_interpolation",
@@ -38,7 +55,8 @@ export function ImputationControls({
     "group_backward_fill",
   ].includes(method);
   function update(values: Record<string, unknown>) {
-    onChange({ ...operation.parameters, ...values, confirmed: false });
+    if (!readiness.ready && values.method && values.method !== "preserve") return;
+    onChange({ ...operation.parameters, method, ...values, confirmed: false });
   }
   return (
     <div className="imputation-controls">
@@ -49,9 +67,10 @@ export function ImputationControls({
         Up to {column?.missing_count} values could be filled; preview calculates
         the actual count.
       </p>
+      <ImputationReadinessNotice column={column} />
       {info && (
         <div className="imputation-recommendation">
-          <strong>Suggested: {names[info.method]}</strong>
+          <strong>Suggested: {names[imputationMethod(info.method)]}</strong>
           <p>{info.explanation}</p>
           {info.warnings.map((warning) => (
             <p key={warning}>{warning}</p>
@@ -93,23 +112,26 @@ export function ImputationControls({
           aria-label={`Imputation method for ${operation.column}`}
           disabled={disabled}
           value={method}
-          onChange={(e) => update({ method: e.target.value })}
+          onChange={(e) => update({ method: e.target.value, date_estimate_acknowledged:false })}
         >
-          {(info?.available_methods || ["preserve", "constant", "mode"]).map(
+          {imputationMethods(info?.available_methods || ["preserve", "constant", "mode"]).map(
             (m) => (
-              <option key={m} value={m}>
+              <option key={m} value={m} disabled={!readiness.ready && m !== "preserve"}>
                 {names[m]}
               </option>
             ),
           )}
         </select>
       </label>
+      {["date","datetime"].includes(column?.detected_type||"")&&["median","group_median"].includes(method)&&<DateMedianNotice rounding={String(operation.parameters.date_rounding||"floor")} acknowledged={operation.parameters.date_estimate_acknowledged===true} disabled={controlsDisabled} onRounding={value=>update({date_rounding:value})} onAcknowledge={value=>update({date_estimate_acknowledged:value})}/>}
+      {method==="date_sequence"&&<label className="setting">Interpret input dates<select value={String(operation.parameters.date_interpretation||"preserve")} disabled={controlsDisabled} onChange={e=>update({date_interpretation:e.target.value})}><option value="preserve">Keep known formats; block ambiguous dates</option><option value="day_first">Day / month / year</option><option value="month_first">Month / day / year</option></select><small>Detects fixed intervals and calendar month/year patterns from at least three original observations. Only interior gaps are filled when all observations match the same pattern.</small></label>}
+      {method==="date_sequence"&&<label className="setting">Minimum original-date coverage<select aria-label="Minimum date pattern coverage" value={Number(operation.parameters.pattern_min_coverage??60)} disabled={controlsDisabled} onChange={e=>update({pattern_min_coverage:Number(e.target.value)})}>{[50,60,75,90,100].map(value=><option key={value} value={value}>{value}% of rows in each sequence</option>)}</select><small>At least 3 originals and the chosen share of rows are required. All original dates must match; previous estimates are excluded.</small></label>}
       {method === "constant" && (
         <label className="setting">
           Constant value
           <input
             aria-label={`Imputation constant for ${operation.column}`}
-            disabled={disabled}
+            disabled={controlsDisabled}
             value={String(operation.parameters.value ?? "")}
             onChange={(e) => update({ value: e.target.value })}
             placeholder="A meaningful value, not a missing marker"
@@ -118,8 +140,9 @@ export function ImputationControls({
       )}
       {method !== "preserve" && (
         <>
-          <fieldset className="imputation-groups" disabled={disabled}>
-            <legend>Group by (up to five columns)</legend>
+          <fieldset className="imputation-groups" disabled={controlsDisabled}>
+            <legend>Group by ({method.startsWith("group_") ? "required" : "optional"}, up to five columns)</legend>
+            <p>{method.startsWith("group_") ? "Select columns to keep unrelated sequences separate." : "Leave all unchecked to use the whole column. Select columns to calculate separately within each group."}</p>
             {columns
               .filter((c) => c.column_name !== operation.column)
               .map((c) => (
@@ -129,7 +152,7 @@ export function ImputationControls({
                     aria-label={`Group ${operation.column} by ${c.column_name}`}
                     checked={groups.includes(c.column_name)}
                     disabled={
-                      disabled ||
+                      controlsDisabled ||
                       (!groups.includes(c.column_name) && groups.length >= 5)
                     }
                     onChange={(e) =>
@@ -156,11 +179,11 @@ export function ImputationControls({
                 Order by (ascending)
                 <select
                   aria-label={`Imputation order for ${operation.column}`}
-                  disabled={disabled}
+                  disabled={controlsDisabled}
                   value={String(operation.parameters.order_by || "")}
                   onChange={(e) => update({ order_by: e.target.value })}
                 >
-                  <option value="">Choose ordering column</option>
+                  <option value="">Choose ordering column</option>{method==="date_sequence"&&<option value="__sheet_order__">Current sheet row order</option>}
                   {columns
                     .filter((c) => c.column_name !== operation.column)
                     .map((c) => (
@@ -173,7 +196,7 @@ export function ImputationControls({
                   <input
                     type="checkbox"
                     aria-label={`Single related sequence for ${operation.column}`}
-                    disabled={disabled}
+                    disabled={controlsDisabled}
                     checked={operation.parameters.single_entity === true}
                     onChange={(e) =>
                       update({ single_entity: e.target.checked })

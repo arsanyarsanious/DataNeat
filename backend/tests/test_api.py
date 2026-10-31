@@ -67,7 +67,10 @@ def test_real_workflow_and_authorization(client):
     workbook = load_workbook(io.BytesIO(excel.content))
     assert workbook.active["A2"].value == "001"
     assert workbook.active["D2"].data_type != "f"
-    assert client.get(f"/api/jobs/{job}/download?format=report").json()["validation"]
+    assert client.get(f"/api/jobs/{job}/download?format=report_json").json()["validation"]
+    pdf = client.get(f"/api/jobs/{job}/download?format=report")
+    assert pdf.headers["content-type"] == "application/pdf"
+    assert pdf.content.startswith(b"%PDF-")
     assert client.get(f"/api/files/{fid}/preview").json()["rows"][0][1] == " Cairo "
     assert client.delete(f"/api/files/{fid}").status_code == 200
     assert client.get(f"/api/jobs/{job}").status_code == 404
@@ -479,7 +482,7 @@ def test_imputation_preview_approval_execution_export_and_original(client):
     result = client.get(f"/api/jobs/{job}/results?page=2&page_size=1").json()
     assert result["preview"]["is_imputed"] == [[True, True]]
     assert result["validation"]["missing_after"] == 0
-    report = client.get(f"/api/jobs/{job}/download?format=report").json()
+    report = client.get(f"/api/jobs/{job}/download?format=report_json").json()
     assert report["operations"][0]["imputed_cells"][0]["spreadsheet_row"] == 3
     assert report["operations"][0]["distribution_before"]["numeric"]["mean"] == 15
     assert report["operations"][1]["method"] == "mode"
@@ -521,7 +524,7 @@ def test_imputation_invalid_dependency_and_parameters_return_errors(client):
 
 
 def test_imputation_provenance_survives_rename_and_duplicate_removal(client):
-    uploaded = upload(client, b"Amount,Group\n10,A\nNA,A\n10,A\n")
+    uploaded = upload(client, b"Amount,Group\n10,A\nNA,A\n")
     operations = [
         {
             "column": "Amount",
@@ -536,6 +539,8 @@ def test_imputation_provenance_survives_rename_and_duplicate_removal(client):
             "parameters": {"name": "Value"},
         },
         {"operation": "remove_duplicates", "enabled": True, "parameters": {}},
+        {"operation": "normalize_missing_values", "column": "Amount", "enabled": True,
+         "parameters": {"markers": ["NA"]}},
     ]
     data = client.post(
         f"/api/files/{uploaded['file_id']}/preview-cleaning",
