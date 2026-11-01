@@ -26,7 +26,9 @@ class SupabaseSnapshots:
         self.signing_key = os.environ["STORAGE_SIGNING_KEY"].encode()
         if len(self.signing_key) < 32:
             raise RuntimeError("STORAGE_SIGNING_KEY must contain at least 32 characters")
-        self.headers = {"apikey": self.key, "Authorization": "Bearer " + self.key}
+        self.headers = {"apikey": self.key}
+        if not self.key.startswith("sb_secret_"):
+            self.headers["Authorization"] = "Bearer " + self.key
 
     def request(self, method, path, **kwargs):
         try:
@@ -145,3 +147,4 @@ class CloudStore(Store):
             except HTTPException:
                 # Remote reads still enforce expiry; retry without killing cleanup.
                 pass
+

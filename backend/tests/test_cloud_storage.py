@@ -103,6 +103,7 @@ def test_snapshot_signature_and_identity_checked_before_restore(monkeypatch):
 def test_exported_routes_and_missing_api(tmp_path, monkeypatch):
     (tmp_path / "index.html").write_text("cover")
     (tmp_path / "workspace.html").write_text("workspace")
+    (tmp_path / "404.html").write_text("not found")
     monkeypatch.setenv("STATIC_DIR", str(tmp_path))
     app = FastAPI()
     install_static_site(app)
@@ -111,3 +112,4 @@ def test_exported_routes_and_missing_api(tmp_path, monkeypatch):
     assert client.get("/workspace").text == "workspace"
     assert client.get("/api/missing").status_code == 404
     assert client.get("/missing.js").status_code == 404
+
