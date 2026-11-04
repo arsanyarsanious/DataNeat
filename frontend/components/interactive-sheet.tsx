@@ -20,7 +20,7 @@ import { SheetShortcuts } from "./sheet-shortcuts";
 import { WorkflowTools } from "./workflow-tools";
 import { QualityWorkbench, qualityTools, type QualityToolId } from "./quality-workbench";
 import { QuickCleanReview } from "./quick-clean-review";
-import { GuidedCleaning, canonicalIssueGroups } from "./guided-cleaning";
+import { GuidedCleaning, isMissingIssue, canonicalIssueGroups } from "./guided-cleaning";
 import { editorRequest, workflowJob } from "@/lib/workflow";
 type CellIssue = { kind: string; message: string; classification?: string };
 type Sheet = {
@@ -112,17 +112,17 @@ const colors: Record<string, string> = {
   rule_required: "#ed6b78", rule_unique: "#ed6b78", rule_allowed: "#ed6b78", rule_pattern: "#ed6b78", rule_type: "#ed6b78", rule_range: "#ed6b78", rule_date_range: "#ed6b78",
 };
 const issueKindMap: Record<string, string> = { data_format: "data_format", invalid_data_format: "invalid_data_format", time_format: "time", invalid_time: "invalid_time", duration_format: "duration", invalid_duration: "invalid_duration", missing_marker: "missing_marker", missing_values: "missing", invalid_dates: "invalid_date", ambiguous_dates: "ambiguous_date", date_format_inconsistency: "date_format", case_inconsistency: "capitalization", extra_whitespace: "whitespace", currency_inconsistency: "currency", percentage_inconsistency: "percentage", symbol_inconsistency: "symbol", phone_inconsistency: "phone", invalid_phone: "phone", type_mismatch: "type", odd_value: "odd_value", boolean_inconsistency: "boolean", invalid_email: "email" };
-export function InteractiveSheet({ fileId, originalRows, persisted = false, onPhaseChange }: { fileId: string; originalRows:number; persisted?:boolean; onPhaseChange?:(phase:"choose"|"clean"|"results")=>void }) {
-  const [phase,setPhase]=useState<"choose"|"clean"|"results">("choose"),[flowReady,setFlowReady]=useState(false);
+export function InteractiveSheet({ fileId, originalRows, persisted = false, onPhaseChange }: { fileId: string; originalRows:number; persisted?:boolean; onPhaseChange?:(phase:"choose"|"clean"|"impute"|"results")=>void }) {
+  const [phase,setPhase]=useState<"choose"|"clean"|"impute"|"results">("choose"),[flowReady,setFlowReady]=useState(false);
   const [drawer,setDrawer]=useState<"issues"|"history"|"tools"|"help"|null>(null),[awaitingAutomatic,setAwaitingAutomatic]=useState(false);
   const [automaticNotes,setAutomaticNotes]=useState<{runId:string;hadSteps:boolean;skipped:string[]}|null>(null);
   const [toolsBusy,setToolsBusy]=useState(false),[activeJob,setActiveJob]=useState<{id:string;status:string;stage:string}|null>(null);
   const flowRef=useRef<HTMLElement>(null);
-  useEffect(()=>{try{const saved=sessionStorage.getItem(`dataneat-flow-${fileId}`);if(saved==="clean"||saved==="results")setPhase(saved);}catch{}try{const notes=JSON.parse(sessionStorage.getItem(`dataneat-automatic-notes-${fileId}`)||"null");if(notes&&typeof notes.runId==="string"&&Array.isArray(notes.skipped))setAutomaticNotes(notes);}catch{}setFlowReady(true);},[fileId]);
+  useEffect(()=>{try{const saved=sessionStorage.getItem(`dataneat-flow-${fileId}`);if(saved==="clean"||saved==="impute"||saved==="results")setPhase(saved);}catch{}try{const notes=JSON.parse(sessionStorage.getItem(`dataneat-automatic-notes-${fileId}`)||"null");if(notes&&typeof notes.runId==="string"&&Array.isArray(notes.skipped))setAutomaticNotes(notes);}catch{}setFlowReady(true);},[fileId]);
   useEffect(()=>{if(!flowReady)return;try{sessionStorage.setItem(`dataneat-flow-${fileId}`,phase);}catch{}onPhaseChange?.(phase);flowRef.current?.scrollIntoView({block:"start"});flowRef.current?.querySelector<HTMLButtonElement>('nav button[aria-current="step"]')?.focus({preventScroll:true});},[phase,flowReady,fileId,onPhaseChange]);
-  function goPhase(next:"choose"|"clean"|"results"){setSelection(null);setDrawer(null);setAwaitingAutomatic(false);setPhase(next);}
+  function goPhase(next:"choose"|"clean"|"impute"|"results"){setSelection(null);setDrawer(null);setAwaitingAutomatic(false);setPhase(next);}
   function toggleDrawer(next:"issues"|"history"|"tools"|"help"){setSelection(null);setDrawer(current=>current===next?null:next);}
-  function beginAutomatic(){goPhase("clean");if(sheet?.profile.columns.some(c=>c.missing_marker_review?.count)){setAwaitingAutomatic(true);setDrawer("issues");}else setAutomaticOpen(true);}
+  function beginAutomatic(){goPhase("clean");setAutomaticOpen(true);}
 
   const [showOriginalColors,setShowOriginalColors]=useState(false);
   const [colorsLoading,setColorsLoading]=useState(false);
@@ -266,7 +266,7 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
     setLoadingIssueKinds(true);
     api<{ available_kinds: string[] }>(`/files/${fileId}/editor/next-issue?column=${encodeURIComponent(issueColumn)}&distinct_types=true`, { signal: controller.signal }).then(data => {
       if (controller.signal.aborted) return;
-      setColumnIssueKinds(data.available_kinds);
+      setColumnIssueKinds(data.available_kinds.filter(kind=>!isMissingIssue(kind)));
       setIssueKind(kind => kind === "any" || data.available_kinds.includes(kind) ? kind : "any");
     }).catch(e => { if (!controller.signal.aborted) setIssueKindsError((e as Error).message); }).finally(() => { if (!controller.signal.aborted) setLoadingIssueKinds(false); });
     return () => controller.abort();
@@ -430,6 +430,7 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
   }
   async function jumpToIssue(first = false, fixIt = false, requestedColumn = issueColumn, requestedKind = issueKind) {
     if (!sheet || !requestedColumn || busy) return;
+    if (isMissingIssue(requestedKind)) {goPhase("impute");return;}
     setDrawer(null);
     setIssueColumn(requestedColumn); setIssueKind(requestedKind);
     setBusy(true);
@@ -444,11 +445,12 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
       const nextSheet = await api<Sheet>(`/files/${fileId}/editor?page=${found.target.page}&original_colors=${showOriginalColors}`);
       setSheet(nextSheet);
       const targetKind = found.new_kinds?.[0] || requestedKind;
+      if(isMissingIssue(targetKind)){goPhase("impute");return;}
       setCurrentIssueKind(targetKind);
       if (fixIt) {
         const row = nextSheet.preview.row_indices.indexOf(found.target.row_index);
         const columnIndex = nextSheet.preview.columns.indexOf(requestedColumn);
-        const cell: Selection = { row: found.target.row_index, column: requestedColumn, value: nextSheet.preview.rows[row][columnIndex], issues: nextSheet.preview.cell_issues[row][columnIndex], left: Math.max(12, Math.min(window.innerWidth - 392, window.innerWidth / 2 - 190)), top: 110 };
+        const cell: Selection = { row: found.target.row_index, column: requestedColumn, value: nextSheet.preview.rows[row][columnIndex], issues: nextSheet.preview.cell_issues[row][columnIndex], left: Math.max(12, Math.min(window.innerWidth - 652, window.innerWidth / 2 - 320)), top: 110 };
         setSelection(cell);
         setDateOutput("YYYY-MM-DD");setGroup("");setOrderBy("");setIgnoreScope("cell");setSymbol("");setIssueColumns([requestedColumn]);
         chooseQuick(targetKind === "whitespace" ? "trim" : ["data_format","invalid_data_format"].includes(targetKind) ? "data_format" : targetKind === "rule_negative" ? "absolute" : targetKind === "time" ? "time" : targetKind === "duration" ? "duration" : targetKind === "boolean" ? "boolean" : targetKind === "capitalization" ? "title" : targetKind === "date_format" || targetKind === "ambiguous_date" ? "dates" : targetKind === "missing" ? "constant" : ["currency", "percentage", "phone", "symbol"].includes(targetKind) ? "custom" : targetKind === "duplicate" ? "duplicates" : "clear", cell, true, targetKind);
@@ -545,7 +547,7 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
   const summaryMap = new Map<string, { kind: string; count: number; column: string }>();
   for (const column of sheet.profile.columns) for (const issue of column.issues) {
     const kind = issueKindMap[issue.issue] || (issue.issue.startsWith("rule_") ? issue.issue : "");
-    if (!kind) continue;
+    if (!kind || (phase==="clean" && isMissingIssue(kind))) continue;
     const previous = summaryMap.get(kind);
     summaryMap.set(kind, { kind, count: (previous?.count || 0) + issue.count, column: previous?.column || column.column_name });
   }
@@ -557,6 +559,7 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
   const noPendingChange=affectedCount===0&&interpretedDateCount===0;
   const hasRecordedDataChanges=sheet.changes.some(change=>change.changed_cells>0);
   const originalColorsControl=sheet.original_colors?.supported?<OriginalColorsControl enabled={!!colorsActive} busy={colorsLoading} disabled={busy||toolsBusy} message={sheet.original_colors.message} onToggle={()=>void toggleOriginalColors()}/>:null;
+  const cleaningGroups=canonicalIssueGroups(sheet.profile).filter(item=>!isMissingIssue(item.kind));
   const exploreColumns=sheet.preview.columns.slice(0,5);
   const exploreRows=sheet.preview.rows.slice(0,4);
   return (
@@ -565,7 +568,7 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
       {phase!=="results"&&colorsActive&&<div className="original-colors-note"><span>{sheet.original_colors?.has_colors===false?"No original solid fills found.":"Original colors shown. Warning icons and colored edges mark issues."}</span><details><summary>Display &amp; export limits</summary><p>{sheet.original_colors?.limitations.join(" ")}</p></details></div>}
       <nav className="cleaning-journey" aria-label="Cleaning stages">
         <div className="journey-step journey-step-complete"><span className="journey-step-number" aria-hidden="true"><CheckCircle2 size={17}/></span><span className="journey-step-label">Upload<small className="journey-step-status">Complete</small></span></div>
-        {([["choose","Explore",2],["clean","Review",3],["results","Export",4]] as const).map(([step,label,number])=><button className="journey-step" key={step} type="button" aria-current={phase===step?"step":undefined} disabled={busy||toolsBusy} onClick={()=>goPhase(step)}><span className="journey-step-number" aria-hidden="true">{number}</span><span className="journey-step-label">{label}</span></button>)}
+        {([["choose","Explore",2],["clean","Clean",3],["impute","Imputation",4],["results","Export",5]] as const).map(([step,label,number])=><button className="journey-step" key={step} type="button" aria-current={phase===step?"step":undefined} disabled={busy||toolsBusy} onClick={()=>goPhase(step)}><span className="journey-step-number" aria-hidden="true">{number}</span><span className="journey-step-label">{label}</span></button>)}
       </nav>
       <section className="method-choice" aria-label="Choose a cleaning method" hidden={phase!=="choose"}>
         <section className="explore-preview-card" aria-label="Data preview and metrics">
@@ -580,6 +583,18 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
         <h2>How would you like to clean your data?</h2><p>{originalRows.toLocaleString()} rows · {sheet.profile.columns_count} columns · Your original is preserved.</p>
         <div className="cleaning-paths"><div><span className="recommended-path">Recommended</span><h3>Review fixes together</h3><p>Choose a correction once for each type of issue, preview the changes, then apply them together.</p><Button disabled={busy||toolsBusy} onClick={()=>{goPhase("clean");setQuickReview("suggested");}}>Review suggested fixes</Button><Button variant="ghost" disabled={busy||toolsBusy} onClick={beginAutomatic}>Clean automatically</Button></div><div><h3>Interactive cleaning</h3><p>Follow one issue at a time, or explore the spreadsheet yourself.</p><Button disabled={busy||toolsBusy} onClick={()=>{goPhase("clean");setGuidedOpen(true);}}>Guided cleaning</Button><Button variant="outline" disabled={busy||toolsBusy} onClick={()=>goPhase("clean")}>Clean manually</Button></div></div>
       </section>
+{phase==="impute"&&<section className="imputation-phase panel"><h2>Missing value imputation</h2>{cleaningGroups.length>0&&<p role="alert">Finish reviewing the {cleaningGroups.length} remaining column or row issues in Clean before filling empty cells.</p>}<p>Review missing values and the distribution of the observed data before choosing an estimate. You can also leave cells empty.</p>
+       {sheet.profile.columns.some(c=>c.missing_marker_review?.count)&&<section className="marker-review panel" aria-label="Review possible missing-value labels"><strong>Should these labels become empty cells?</strong><p>Text such as NA, null and empty is kept as written until you choose. Actual blank cells are already empty.</p><details><summary>Review labels in {sheet.profile.columns.filter(c=>c.missing_marker_review?.count).length} columns</summary>{sheet.profile.columns.filter(c=>c.missing_marker_review?.count).map(column=><div className="marker-review-column" key={column.column_name}><strong>{column.column_name}</strong><span>{column.missing_marker_review!.count} cells · {column.missing_marker_review!.examples.join(", ")}</span><Button size="sm" disabled={busy} onClick={()=>void resolveMissingMarkers(column.column_name,true)}>Convert labels to empty</Button><Button size="sm" variant="outline" disabled={busy} onClick={()=>void resolveMissingMarkers(column.column_name,false)}>Keep as text</Button></div>)}</details></section>}
+ {sheet.profile.columns.filter(c=>c.missing_count>0).map(c=>{
+ const recommendation=c.imputation, numeric=recommendation?.statistics?.numeric, ready=getImputationReadiness(c);
+ return <article className="panel" key={c.column_name}><h3>{c.column_name}</h3><p>{c.missing_count} missing · {c.missing_percentage}% of this column</p>
+ {numeric&&<p>Mean {numeric.mean?.toFixed(2)} · Median {numeric.median?.toFixed(2)} · Standard deviation {numeric.std?.toFixed(2)} · Possible outliers {numeric.outlier_count} · Skewness {numeric.skewness?.toFixed(2)}</p>}
+ <p>{recommendation?.explanation}</p>{recommendation?.warnings?.map((w,i)=><p key={i}>{w}</p>)}{!ready.ready&&<p role="alert">{ready.message}</p>}
+ <Button disabled={busy||!ready.ready||!!cleaningGroups.length} onClick={()=>setSettingsColumn(c.column_name)}>Choose imputation method</Button>
+ {numeric&&<Button variant="outline" onClick={()=>setQualityTool({tool:"outliers",column:c.column_name})}>Analyze outliers</Button>}
+ {["integer","decimal","numeric","float"].includes(c.detected_type)&&<Button variant="outline" disabled={!ready.ready||!!cleaningGroups.length} onClick={()=>setQualityTool({tool:"model_imputation",column:c.column_name})}>KNN or iterative imputation</Button>}</article>})}
+ {!sheet.profile.missing_count&&<p>No empty cells to fill.</p>}
+ <Button variant="outline" onClick={()=>goPhase("clean")}>Back to cleaning</Button> <Button onClick={()=>goPhase("results")}>Review &amp; export</Button></section>}
       <div className="sheet-toolbar" hidden={phase!=="clean"}>
         <div className="ribbon-heading"><span className="ribbon-title">Workbook tools</span>
         <div className="ribbon-heading-actions">
@@ -594,7 +609,7 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
           <div className="ribbon-group" role="group" aria-label="Clean and review"><div className="ribbon-group-buttons">{(["issues","history","tools"] as const).map(panel=><Button key={panel} size="sm" variant="ghost" aria-pressed={drawer===panel} onClick={()=>toggleDrawer(panel)}>{panel==="history"?<History size={16} aria-hidden="true"/>:panel==="tools"?<SlidersHorizontal size={16} aria-hidden="true"/>:<ListChecks size={16} aria-hidden="true"/>}{panel[0].toUpperCase()+panel.slice(1)}</Button>)}</div><span className="ribbon-group-label">Clean & review</span></div>
           <div className="ribbon-group" role="group" aria-label="Simpler cleaning"><div className="ribbon-group-buttons"><Button size="sm" variant="ghost" disabled={busy||toolsBusy} aria-pressed={guidedOpen} onClick={()=>{setSelection(null);setDrawer(null);setGuidedOpen(open=>!open);}}><ArrowRight size={16} aria-hidden="true"/>Guided cleaning</Button><Button size="sm" variant="ghost" disabled={busy||toolsBusy} onClick={()=>setQuickReview("saved")}>Saved choices</Button></div><span className="ribbon-group-label">Fewer steps</span></div>
           <div className="ribbon-group" role="group" aria-label="Help"><div className="ribbon-group-buttons"><Button size="sm" variant="ghost" aria-pressed={drawer==="help"} onClick={()=>toggleDrawer("help")}><CircleHelp size={16} aria-hidden="true"/>Help & legend</Button></div><span className="ribbon-group-label">Guide</span></div>
-          <div className="ribbon-group ribbon-finish" role="group" aria-label="Export spreadsheet"><div className="ribbon-group-buttons"><Button size="sm" disabled={busy||toolsBusy} onClick={()=>goPhase("results")}><FileDown size={16} aria-hidden="true"/>Review & export</Button></div><span className="ribbon-group-label">Finish</span></div>
+          <div className="ribbon-group ribbon-finish" role="group" aria-label="Export spreadsheet"><div className="ribbon-group-buttons"><Button size="sm" disabled={busy||toolsBusy} onClick={()=>goPhase("impute")}><FileDown size={16} aria-hidden="true"/>Continue to imputation</Button></div><span className="ribbon-group-label">Finish</span></div>
         </div>
       </div>
       {pendingLeave&&<div className="shortcut-backdrop"><section className="shortcut-dialog panel" role="dialog" aria-modal="true" aria-label="Download before leaving"><h2>Before you leave</h2><p>{busy||toolsBusy?"A task is still running. Your latest completed changes may not have been downloaded.":"Your latest changes have not been downloaded as Excel or CSV."}</p><div className="shortcut-actions"><Button onClick={()=>{setPendingLeave(null);goPhase("results");}}>Stay and download</Button><Button variant="outline" onClick={()=>setPendingLeave(null)}>Keep cleaning</Button><Button variant="ghost" onClick={()=>{allowLeave.current=true;pendingLeave.proceed();setPendingLeave(null);}}>Leave anyway</Button></div></section></div>}
@@ -603,14 +618,14 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
       {error&&!selection&&<div className="error workspace-persistent-error" role="alert"><span>{error}</span><button aria-label="Dismiss error" onClick={()=>setError("")}>×</button></div>}
       {historyFeedback?.error&&drawer!=="history"&&<div className="error" role="alert">{historyFeedback.message}<Button variant="ghost" size="sm" onClick={()=>{setPhase("clean");setDrawer("history");}}>View history</Button></div>}
       {automaticOpen && <AutomaticCleaning fileId={fileId} revision={sheet.revision} profile={sheet.profile} onClose={() => setAutomaticOpen(false)} onApplied={async () => {setSelection(null);setAffectedOnly(false);setFilterColumn("");setFilterKind("any");const updated=await api<Sheet>(`/files/${fileId}/editor?page=1&original_colors=${showOriginalColors}`);setSheet(updated);setSuccess({message:"Automatic cleaning finished. Undo the whole run in History.",undoId:updated.changes.at(-1)?.id});}} onReview={()=>{setAutomaticOpen(false);goPhase("clean");setDrawer("issues");void filterView(true,"","any");}} onDownload={async()=>{const result=await workflowJob<{download:string;filename:string}>(fileId,sheet.revision,{operation:"export",format:"xlsx"});const link=document.createElement("a");link.href=result.download;link.download=result.filename;link.click();markDownloaded();}} />}
-      {settingsColumn && <ColumnSettings fileId={fileId} revision={sheet.revision} profile={sheet.profile} initialColumn={settingsColumn} onClose={() => setSettingsColumn(null)} onChanged={async () => { setSelection(null); setIssueColumn(null); setAffectedOnly(false);setFilterColumn("");setFilterKind("any"); setSheet(await api<Sheet>(`/files/${fileId}/editor?page=1&original_colors=${showOriginalColors}`)); }} />}
-      {qualityTool&&<QualityWorkbench fileId={fileId} revision={sheet.revision} profile={sheet.profile} initialTool={qualityTool.tool} initialColumn={qualityTool.column} onClose={()=>setQualityTool(null)} onBusyChange={setToolsBusy} onChanged={async()=>{setSelection(null);setIssueColumn(null);setSheet(await api<Sheet>(sheetPath(1)));}}/>}
-      {quickReview&&<QuickCleanReview fileId={fileId} revision={sheet.revision} profile={sheet.profile} initialTab={quickReview} onClose={()=>setQuickReview(null)} onBusyChange={setToolsBusy} onApplied={async()=>{setSelection(null);setIssueColumn(null);setAffectedOnly(false);setFilterColumn("");setFilterKind("any");setSheet(await api<Sheet>(`/files/${fileId}/editor?page=1&original_colors=${showOriginalColors}`));}} onGuided={()=>{setQuickReview(null);goPhase("clean");setGuidedOpen(true);}} onFinish={()=>{setQuickReview(null);goPhase("results");}}/>}
+      {settingsColumn && <ColumnSettings imputation={phase==="impute"} fileId={fileId} revision={sheet.revision} profile={sheet.profile} initialColumn={settingsColumn} onClose={() => setSettingsColumn(null)} onChanged={async () => { setSelection(null); setIssueColumn(null); setAffectedOnly(false);setFilterColumn("");setFilterKind("any"); setSheet(await api<Sheet>(`/files/${fileId}/editor?page=1&original_colors=${showOriginalColors}`)); }} />}
+      {qualityTool&&<QualityWorkbench imputation={phase==="impute"} fileId={fileId} revision={sheet.revision} profile={sheet.profile} initialTool={qualityTool.tool} initialColumn={qualityTool.column} onClose={()=>setQualityTool(null)} onBusyChange={setToolsBusy} onChanged={async()=>{setSelection(null);setIssueColumn(null);setSheet(await api<Sheet>(sheetPath(1)));}}/>}
+      {quickReview&&<QuickCleanReview fileId={fileId} revision={sheet.revision} profile={sheet.profile} initialTab={quickReview} onClose={()=>setQuickReview(null)} onBusyChange={setToolsBusy} onApplied={async()=>{setSelection(null);setIssueColumn(null);setAffectedOnly(false);setFilterColumn("");setFilterKind("any");setSheet(await api<Sheet>(`/files/${fileId}/editor?page=1&original_colors=${showOriginalColors}`));}} onGuided={()=>{setQuickReview(null);goPhase("clean");setGuidedOpen(true);}} onFinish={()=>{setQuickReview(null);goPhase("impute");}}/>}
       {unifyColumn && <UnifyTextValues key={unifyColumn} fileId={fileId} column={unifyColumn} onClose={() => setUnifyColumn(null)} onApplied={async count => { const updated = await api<Sheet>(sheetPath(stream.visiblePage)); setSheet(updated); setSuccess({ message: `${count} cells unified in ${unifyColumn}.`, undoId: updated.changes.at(-1)?.id }); }} />}
 
       <div className="workspace-sheet" hidden={phase!=="clean"}>
-      <GuidedCleaning fileId={fileId} revision={sheet.revision} profile={sheet.profile} open={guidedOpen&&phase==="clean"} busy={busy||toolsBusy} onFix={async item=>{await jumpToIssue(true,true,item.column,item.kind);}} onClose={()=>setGuidedOpen(false)} onFinish={()=>goPhase("results")} onQuickReview={()=>setQuickReview("suggested")} onTool={(tool,column)=>setQualityTool({tool:tool==="outliers"?"outliers":"cross_column",column})}/>
-      {!guidedOpen&&<div className="next-suggestion"><span>{issueSummary.length?`${sheet.overview?.types??issueSummary.length} issue types remain. Review them together or follow Guided cleaning.`:"No detected issues remain. Your current copy is ready to review and download."}</span><Button size="sm" variant="ghost" disabled={busy||toolsBusy} onClick={()=>issueSummary.length?setGuidedOpen(true):goPhase("results")}>{issueSummary.length?"Guide me":"Review results"}</Button></div>}
+      <GuidedCleaning fileId={fileId} revision={sheet.revision} profile={sheet.profile} open={guidedOpen&&phase==="clean"} busy={busy||toolsBusy} onFix={async item=>{await jumpToIssue(true,true,item.column,item.kind);}} onClose={()=>setGuidedOpen(false)} onFinish={()=>goPhase("impute")} onQuickReview={()=>setQuickReview("suggested")} onTool={(tool,column)=>setQualityTool({tool:tool==="outliers"?"outliers":"cross_column",column})}/>
+      {!guidedOpen&&<div className="next-suggestion"><span>{issueSummary.length?`${sheet.overview?.types??issueSummary.length} issue types remain. Review them together or follow Guided cleaning.`:"No detected issues remain. Your current copy is ready to review and download."}</span><Button size="sm" variant="ghost" disabled={busy||toolsBusy} onClick={()=>issueSummary.length?setGuidedOpen(true):goPhase("impute")}>{issueSummary.length?"Guide me":"Continue to imputation"}</Button></div>}
       <div className="panel editor-sheet-panel">
       {stream.rows.some(row=>row.imputed?.some(Boolean)) && <small className="imputed-estimate-note">Dotted underlines mark estimated (imputed) values, not verified observations.</small>}
         {issueColumn && <div className="issue-navigation" aria-label="Column issue navigation">
@@ -638,10 +653,10 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
                   {item.values.map((v, c) => {
                     const kind = sheet.profile.columns.find((column) => column.column_name === sheet.preview.columns[c])?.detected_type || "";
                     const displayed = previewNumber(v, kind, commaSeparators);
-                    const issues = item.issues![c];
+                    const issues = item.issues![c].filter(issue=>!isMissingIssue(issue.kind));
                     function cell(element: HTMLElement): Selection {
                       const rect = element.getBoundingClientRect();
-                      const width = Math.min(380, window.innerWidth - 24);
+                      const width = Math.min(640, window.innerWidth - 24);
                       return {
                         row: item.index!,
                         column: sheet!.preview.columns[c],
@@ -718,7 +733,7 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
         <header className="workspace-drawer-heading"><h2>{drawer==="issues"?"Issues & filters":drawer==="history"?"Cleaning history":drawer==="tools"?"Tools":"Help & legend"}</h2><Button variant="ghost" size="sm" aria-label="Close side panel" onClick={()=>setDrawer(null)}>×</Button></header>
         <div hidden={drawer!=="issues"}>
           {awaitingAutomatic&&<div className="notice automatic-review-notice"><p>Review possible missing-value labels before automatic cleaning.</p><Button size="sm" disabled={busy} onClick={()=>{setAwaitingAutomatic(false);setDrawer(null);setAutomaticOpen(true);}}>Continue to automatic cleaning</Button><small>Unresolved columns stay unchanged.</small></div>}
-      {sheet.profile.columns.some(c=>c.missing_marker_review?.count)&&<section className="marker-review panel" aria-label="Review possible missing-value labels"><strong>Should these labels become empty cells?</strong><p>Text such as NA, null and empty is kept as written until you choose. Actual blank cells are already empty.</p><details><summary>Review labels in {sheet.profile.columns.filter(c=>c.missing_marker_review?.count).length} columns</summary>{sheet.profile.columns.filter(c=>c.missing_marker_review?.count).map(column=><div className="marker-review-column" key={column.column_name}><strong>{column.column_name}</strong><span>{column.missing_marker_review!.count} cells · {column.missing_marker_review!.examples.join(", ")}</span><Button size="sm" disabled={busy} onClick={()=>void resolveMissingMarkers(column.column_name,true)}>Convert labels to empty</Button><Button size="sm" variant="outline" disabled={busy} onClick={()=>void resolveMissingMarkers(column.column_name,false)}>Keep as text</Button></div>)}</details></section>}
+
       <div className="affected-row-tools" ref={manualRef}>
         {manualMode&&<p>Manual cleaning: click an issue type or a highlighted cell to choose a correction.</p>}
         <label><input type="checkbox" disabled={busy} checked={affectedOnly} onChange={e=>void filterView(e.target.checked)}/> Show affected rows only</label>
@@ -742,7 +757,7 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
         </div>
         <div hidden={drawer!=="tools"}>
           <Button variant="outline" disabled={busy} onClick={beginAutomatic}>Automatic cleaning survey</Button>
-          <section className="quality-launchers" aria-label="Additional cleaning tools"><h3>More cleaning tools</h3>{qualityTools.map(tool=><button type="button" key={tool.id} disabled={busy||toolsBusy} onClick={()=>setQualityTool({tool:tool.id,column:issueColumn||undefined})}><strong>{tool.title}</strong><small>{tool.description}</small></button>)}</section>
+          <section className="quality-launchers" aria-label="Additional cleaning tools"><h3>More cleaning tools</h3>{qualityTools.filter(tool=>tool.id!=="model_imputation").map(tool=><button type="button" key={tool.id} disabled={busy||toolsBusy} onClick={()=>setQualityTool({tool:tool.id,column:issueColumn||undefined})}><strong>{tool.title}</strong><small>{tool.description}</small></button>)}</section>
       <div className="column-tools-bar"><Button variant="outline" disabled={busy || !sheet.preview.columns.length} onClick={() => { setSelection(null); setSettingsColumn(issueColumn || sheet.preview.columns[0]); }}>Column settings &amp; insights</Button><small>More options for the same working copy</small></div>
 
           <Button variant="outline" disabled={busy||toolsBusy} onClick={()=>{setDrawer(null);setShortcut("presets");}}>Ready-made shortcuts</Button><label className="setting">Unify text values in<select aria-label="Unify text column" value={unifyColumn||""} disabled={busy} onChange={e=>{if(e.target.value){setSelection(null);setUnifyColumn(e.target.value);}}}><option value="">Choose a text column…</option>{sheet.profile.columns.filter(c=>["text","category","categorical"].includes(c.detected_type)).map(c=><option key={c.column_name} value={c.column_name}>{c.column_name}</option>)}</select></label>
@@ -814,7 +829,7 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
           role="dialog"
           aria-label={`Fix ${selection.column} row ${selection.row + 2}`}
           className="cell-fix-panel"
-          style={{ left: selection.left, top: selection.top }}
+          style={{ width:"min(640px, calc(100vw - 24px))", maxWidth:"calc(100vw - 24px)", left: selection.left, top: selection.top }}
           onMouseEnter={() => {
             if (hoverTimer.current) clearTimeout(hoverTimer.current);
           }}

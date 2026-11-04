@@ -33,7 +33,7 @@ function defaults(action:string):Record<string,unknown>{
   if(action==="normalize_numeric")return {};
   return {action:"preserve",symbol:"",position:"prefix",grouping:"remove"};
 }
-export function ColumnSettings({fileId,revision,profile,initialColumn,onClose,onChanged}:{fileId:string;revision:number;profile:Profile;initialColumn:string;onClose:()=>void;onChanged:()=>Promise<void>}){
+export function ColumnSettings({fileId,revision,profile,initialColumn,imputation=false,onClose,onChanged}:{fileId:string;revision:number;profile:Profile;initialColumn:string;imputation?:boolean;onClose:()=>void;onChanged:()=>Promise<void>}){
   const [column,setColumn]=useState(initialColumn);
   const [allowNegative,setAllowNegative]=useState(profile.columns.find(c=>c.column_name===initialColumn)?.intent?.allow_negative!==false);
   useEffect(()=>{setAllowNegative(profile.columns.find(c=>c.column_name===column)?.intent?.allow_negative!==false);},[column,profile]);
@@ -46,13 +46,13 @@ export function ColumnSettings({fileId,revision,profile,initialColumn,onClose,on
       const current=await api<{rules:Record<string,Record<string,unknown>>}>(`/files/${fileId}/workflow/settings`);
       await workflowJob(fileId,revision,{operation:"decision",decision:{kind:"rules",column,settings:{...(current.rules[column]||{}),type:dataType}}});
       await onChanged();setReview(null);
-      setAction("impute_missing_values");setParameters(defaults("impute_missing_values"));
+      setAction(initialAction);setParameters(defaults(initialAction));
       setMessage("Column type saved. Checks and suggestions now use your choice. Values are unchanged; you can undo this in History.");
     } catch(e){setError((e as Error).message);}finally{setBusy(false);}
   }
   const [tab,setTab]=useState("Settings");
   const inferredType=profile.columns.find(c=>c.column_name===initialColumn)?.detected_type||"";
-  const initialAction=formatActionForType[inferredType]||(inferredType==="time"?"normalize_time":"normalize_capitalization");
+  const initialAction=imputation?"impute_missing_values":formatActionForType[inferredType]||(inferredType==="time"?"normalize_time":"normalize_capitalization");
   const [action,setAction]=useState(initialAction);
   const [parameters,setParameters]=useState<Record<string,unknown>>(defaults(initialAction));
   const [drafts,setDrafts]=useState<Draft[]>([]);
@@ -87,17 +87,17 @@ export function ColumnSettings({fileId,revision,profile,initialColumn,onClose,on
     if(e.key==="Escape"&&!busy){e.stopPropagation();onClose();}
     if(e.key==="Tab"){const controls=panel.current?.querySelectorAll<HTMLElement>('button:not(:disabled),a[href],input:not(:disabled),select:not(:disabled),textarea:not(:disabled),summary');if(!controls?.length)return;const first=controls[0],last=controls[controls.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}}
   }}>
-    <header className="column-settings-heading"><div><h2 id="column-settings-title">Column settings</h2><p>Changes use your current spreadsheet · Revision {revision}</p></div><button ref={closeRef} className="icon-button" aria-label="Close column settings" disabled={busy} onClick={onClose}>×</button></header>
+    <header className="column-settings-heading"><div><h2 id="column-settings-title">{imputation?"Column imputation":"Column settings"}</h2><p>Changes use your current spreadsheet · Revision {revision}</p></div><button ref={closeRef} className="icon-button" aria-label="Close column settings" disabled={busy} onClick={onClose}>×</button></header>
     <nav className="column-settings-tabs" aria-label="Column tools">{["Settings","Insights","Cleaning plan"].map(name=><button key={name} disabled={busy} aria-pressed={tab===name} onClick={()=>setTab(name)}>{name}{name==="Cleaning plan"&&drafts.length?` (${drafts.length})`:""}</button>)}</nav>
     <div className="column-settings-content">
     {tab!=="Cleaning plan"&&<label className="setting">Column<select value={column} disabled={busy} onChange={e=>{setColumn(e.target.value);setParameters(defaults(action));setMessage("");}}>{available.map(c=><option key={c}>{c}</option>)}</select></label>}
     {tab==="Insights"&&<><ColumnAnalysis columns={profile.columns.filter(c=>c.column_name===column)} selectedColumn={column}/>{profile.columns.find(c=>c.column_name===column)?.imputation&&<ImputationControls operation={{...op,operation:"impute_missing_values",parameters:{method:"preserve"}}} columns={profile.columns} disabled onChange={()=>{}}/>}</>}
-    {tab==="Settings"&&<><section className="column-data-type-setting">
-      <label className="setting">Column data type<select aria-label="Column data type" disabled={busy} value={dataType} onChange={e=>{setDataType(e.target.value);setMessage("");}}>{columnDataTypes.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+    {tab==="Settings"&&<><section hidden={imputation} className="column-data-type-setting">
+      <label className="setting">Column data type<select aria-label="Column data type" disabled={busy} value={dataType} onChange={e=>{setDataType(e.target.value);setMessage("");}}><option value="" hidden>Detected automatically</option>{columnDataTypes.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
       <p>Currently: <strong>{columnTypeLabel(String(selectedProfile?.intent?.type||selectedProfile?.detected_type||"unknown"))}</strong> · {selectedProfile?.intent?.type?"Chosen by you":"Automatically detected"}</p>
       <small>Your choice overrides the column name and automatic detection. It changes checks and suggestions, without converting values. Serial / identifier protects leading zeros. Salary does not assign or convert a currency.</small>
       <Button disabled={busy||dataType===String(selectedProfile?.intent?.type||"")} onClick={saveDataType}>Save data type</Button>
-    </section><section className="negative-policy"><label className="setting">Negative values<select aria-label="Negative value policy" disabled={busy} value={allowNegative?"allow":"deny"} onChange={e=>{setAllowNegative(e.target.value==="allow");setMessage("");}}><option value="allow">Allow negative values</option><option value="deny">Do not allow negative values</option></select><small>For example, Celsius can be negative; Kelvin cannot. This policy flags values without changing them.</small></label><Button variant="outline" disabled={busy||allowNegative===(profile.columns.find(c=>c.column_name===column)?.intent?.allow_negative!==false)} onClick={async()=>{setBusy(true);setError("");try{await workflowJob(fileId,revision,{operation:"decision",decision:{kind:"negative_policy",column,settings:{allow_negative:allowNegative}}});await onChanged();setMessage("Negative value policy saved. Your values were not changed. Close settings to review flagged cells.");}catch(e){setError((e as Error).message);}finally{setBusy(false);}}}>Save negative value policy</Button></section><label className="setting">Action<select aria-label="Column cleaning action" disabled={busy} value={action} onChange={e=>{setAction(e.target.value);setParameters(defaults(e.target.value));setError("");setMessage("");}}>{Object.entries(actions).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+    </section><section hidden={imputation} className="negative-policy"><label className="setting">Negative values<select aria-label="Negative value policy" disabled={busy} value={allowNegative?"allow":"deny"} onChange={e=>{setAllowNegative(e.target.value==="allow");setMessage("");}}><option value="allow">Allow negative values</option><option value="deny">Do not allow negative values</option></select><small>For example, Celsius can be negative; Kelvin cannot. This policy flags values without changing them.</small></label><Button variant="outline" disabled={busy||allowNegative===(profile.columns.find(c=>c.column_name===column)?.intent?.allow_negative!==false)} onClick={async()=>{setBusy(true);setError("");try{await workflowJob(fileId,revision,{operation:"decision",decision:{kind:"negative_policy",column,settings:{allow_negative:allowNegative}}});await onChanged();setMessage("Negative value policy saved. Your values were not changed. Close settings to review flagged cells.");}catch(e){setError((e as Error).message);}finally{setBusy(false);}}}>Save negative value policy</Button></section><label className="setting">Action<select aria-label="Column cleaning action" disabled={busy} value={action} onChange={e=>{setAction(e.target.value);setParameters(defaults(e.target.value));setError("");setMessage("");}}>{Object.entries(actions).filter(([id])=>(id==="impute_missing_values")===imputation).map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
     <fieldset className="column-action-fields" disabled={busy}>
     {action in formatActions&&<DataFormatControls action={action} parameters={parameters} disabled={busy} onChange={change}/>}
     {action==="impute_missing_values"&&<ImputationControls operation={op} columns={profile.columns} disabled={busy} onChange={change}/>}

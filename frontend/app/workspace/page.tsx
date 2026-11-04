@@ -35,7 +35,7 @@ type WorkbookInspection = {
   selected_sheet: string | null;
 };
 export default function Home() {
-  const [flowPhase,setFlowPhase]=useState<"choose"|"clean"|"results">("choose");
+  const [flowPhase,setFlowPhase]=useState<"choose"|"clean"|"impute"|"results">("choose");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [stage, setStage] = useState<
     "upload" | "editor"
@@ -236,7 +236,7 @@ export default function Home() {
                 LESS MESS. MORE POSSIBILITY.
               </div>
               <h1>
-                {stage === "upload" ? "Good data starts here." : flowPhase==="choose" ? "Explore your data." : flowPhase==="results" ? "Export your results." : "Your spreadsheet."}
+                {stage === "upload" ? "Good data starts here." : flowPhase==="choose" ? "Explore your data." : flowPhase==="impute" ? "Review missing values." : flowPhase==="results" ? "Export your results." : "Your spreadsheet."}
               </h1>
               <p>
                 {stage === "upload" ? "Turn messy spreadsheets into clean, consistent data — without the busywork." : ""}

@@ -37,6 +37,17 @@ export type GuidedIssueGroup = { key: string; column: string; kind: string; coun
 const groupKey = (column: string, kind: string) => JSON.stringify([column, kind]);
 const countValue = (value: unknown) => typeof value === "number" && Number.isFinite(value) && value > 0 ? Math.floor(value) : 0;
 
+export const isMissingIssue = (kind: string) => ["missing", "missing_marker", "rule_required"].includes(kind);
+function priority(kind: string) {
+  if (kind === "duplicate") return 0;
+  if (kind === "whitespace") return 1;
+  if (kind === "boolean") return 2;
+  if (kind.startsWith("invalid_") || ["type","odd_value","rule_type","email"].includes(kind)) return 3;
+  if (kind === "capitalization") return 4;
+  if (kind === "date_format") return 5;
+  if (kind === "ambiguous_date") return 6;
+  return 7;
+}
 /** One decision target per column and issue kind, using counts from the entire file. */
 export function canonicalIssueGroups(profile: Profile): GuidedIssueGroup[] {
   const groups = new Map<string, GuidedIssueGroup>();
@@ -58,7 +69,7 @@ export function canonicalIssueGroups(profile: Profile): GuidedIssueGroup[] {
     const key = groupKey(column, "duplicate");
     groups.set(key, { key, column, kind: "duplicate", count: countValue(profile.duplicate_rows) });
   }
-  return [...groups.values()];
+  return [...groups.values()].sort((a,b)=>priority(a.kind)-priority(b.kind));
 }
 
 type Step = GuidedIssueGroup & { status: "pending" | "reviewed" | "skipped" | "resolved"; opened: boolean };
@@ -88,7 +99,7 @@ function loadWalkthrough(fileId: string, revision: number, groups: GuidedIssueGr
   const fresh = (): Walkthrough => ({ fileId, revision, steps: groups.map(group => ({ ...group, status: "pending", opened: false })), current: groups[0]?.key || null, notice: "" });
   try {
     const saved = JSON.parse(sessionStorage.getItem(`dataneat-guided-cleaning-${fileId}`) || "null");
-    if (!saved || saved.version !== 1 || !Array.isArray(saved.steps) || saved.steps.length > 20000 || !Number.isInteger(saved.revision)) return fresh();
+    if (!saved || saved.version !== 2 || !Array.isArray(saved.steps) || saved.steps.length > 20000 || !Number.isInteger(saved.revision)) return fresh();
     const seen = new Set<string>();
     const steps: Step[] = [];
     for (const item of saved.steps) {
@@ -112,8 +123,8 @@ function reconcile(previous: Walkthrough, groups: GuidedIssueGroup[], revision: 
     return { ...item, count: current?.count || 0, status: !current ? "resolved" as const : item.status === "resolved" ? "pending" as const : item.status };
   });
   for (const group of groups) if (!seen.has(group.key)) steps.push({ ...group, status: "pending", opened: false });
-  const priorCurrent = steps.find(item => item.key === previous.current);
-  const current = priorCurrent?.status === "pending" ? priorCurrent.key : steps.find(item => item.status === "pending")?.key || null;
+  steps.sort((a,b)=>priority(a.kind)-priority(b.kind));
+  const current = steps.find(item => item.status === "pending")?.key || null;
   let notice = previous.notice;
   if (attempted && revision !== previous.revision) {
     const remaining = active.get(attempted.key)?.count || 0;
@@ -123,7 +134,7 @@ function reconcile(previous: Walkthrough, groups: GuidedIssueGroup[], revision: 
 }
 
 export function GuidedCleaning({ fileId, revision, profile, open, busy, onFix, onClose, onFinish, onQuickReview, onTool }: Props) {
-  const groups = useMemo(() => canonicalIssueGroups(profile), [profile]);
+  const groups = useMemo(() => canonicalIssueGroups(profile).filter(item=>!isMissingIssue(item.kind)), [profile]);
   const [walkthrough, setWalkthrough] = useState<Walkthrough | null>(null);
   const [opening, setOpening] = useState(false);
   const [error, setError] = useState("");
@@ -139,7 +150,7 @@ export function GuidedCleaning({ fileId, revision, profile, open, busy, onFix, o
   }, [fileId, revision, groups]);
   useEffect(() => {
     if (!walkthrough || walkthrough.fileId !== fileId) return;
-    try { sessionStorage.setItem(`dataneat-guided-cleaning-${fileId}`, JSON.stringify({ version: 1, revision: walkthrough.revision, steps: walkthrough.steps, current: walkthrough.current })); } catch { /* The walkthrough remains usable when browser storage is unavailable. */ }
+    try { sessionStorage.setItem(`dataneat-guided-cleaning-${fileId}`, JSON.stringify({ version: 2, revision: walkthrough.revision, steps: walkthrough.steps, current: walkthrough.current })); } catch { /* The walkthrough remains usable when browser storage is unavailable. */ }
   }, [walkthrough, fileId]);
 
   if (!open) return null;
@@ -190,7 +201,7 @@ export function GuidedCleaning({ fileId, revision, profile, open, busy, onFix, o
       {walkthrough.notice && <p className="guided-notice" role="status">{walkthrough.notice}</p>}
       <div className="guided-actions"><Button type="button" disabled={disabled} onClick={() => void fixCurrent()}>{opening ? "Opening…" : "Fix this type"}</Button><Button type="button" variant="outline" disabled={disabled} onClick={() => moveNext("skipped")}>Skip for now</Button>{current.opened && <Button type="button" variant="outline" disabled={disabled} onClick={() => moveNext("reviewed")}>Next issue<ArrowRight size={15} aria-hidden="true" /></Button>}</div>
       <small className="guided-scope-note">The correction opens with a scope to review. Eligible cells in this column can be handled together.</small>
-    </> : <div className="guided-completion" aria-live="polite"><h4><CheckCircle2 size={18} aria-hidden="true" />Walkthrough complete</h4><p>{reviewed} issue groups reviewed · {skipped} skipped · {resolved} no longer flagged.</p><p>{remainingGroups ? `${remainingGroups} issue groups still have flags on your sheet. Review them before deciding whether the data is ready to export.` : "No issue groups are currently flagged. You can review your changes and export."}</p><div className="guided-actions"><Button type="button" disabled={disabled} onClick={onFinish}>Review &amp; export<ArrowRight size={15} aria-hidden="true" /></Button><Button type="button" variant="outline" disabled={disabled} onClick={onQuickReview}>Review suggested fixes</Button>{remainingGroups > 0 && <Button type="button" variant="outline" disabled={disabled} onClick={revisit}>Revisit remaining issues</Button>}</div></div>}
+    </> : <div className="guided-completion" aria-live="polite"><h4><CheckCircle2 size={18} aria-hidden="true" />Walkthrough complete</h4><p>{reviewed} issue groups reviewed · {skipped} skipped · {resolved} no longer flagged.</p><p>{remainingGroups ? `${remainingGroups} issue groups still have flags on your sheet. Review them before deciding whether the data is ready to export.` : "No issue groups are currently flagged. You can review your changes and export."}</p><div className="guided-actions"><Button type="button" disabled={disabled} onClick={onFinish}>Continue to imputation<ArrowRight size={15} aria-hidden="true" /></Button><Button type="button" variant="outline" disabled={disabled} onClick={onQuickReview}>Review suggested fixes</Button>{remainingGroups > 0 && <Button type="button" variant="outline" disabled={disabled} onClick={revisit}>Revisit remaining issues</Button>}</div></div>}
     {error && <div className="quality-error" role="alert"><strong>Cannot open this correction</strong><p>{error}</p></div>}
   </section>;
 }

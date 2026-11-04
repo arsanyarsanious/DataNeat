@@ -13,7 +13,6 @@ const questions:{key:PolicyKey;title:string;options:[string,string][];types?:str
  {key:"capitalization",title:"How should text capitalization look?",types:["text","category","categorical"],options:[["preserve","Keep existing capitalization"],["title","Title"],["upper","UPPER"],["lower","lower"]]},
  {key:"dates",title:"How should dates be interpreted?",types:["date","datetime"],options:[["preserve","Keep dates unchanged"],["unambiguous","Standardize only unambiguous dates"],["day_first","Day first (DD/MM/YYYY)"],["month_first","Month first (MM/DD/YYYY)"]]},
  {key:"date_output",title:"How should standardized dates look?",types:["date","datetime"],options:DATE_FORMAT_OPTIONS},
- {key:"missing",title:"How should missing numeric measurements be handled?",types:["integer","decimal","numeric","float"],options:[["preserve","Leave empty"],["median","Estimate using the column median"],["mean","Estimate using the column mean"]]}
 ];
 type Result={changed_cells:number;removed_rows?:number;operations:unknown[];skipped:string[];remaining?:{cells?:number};run_id?:string};
 export function AutomaticCleaning({fileId,revision,profile,onClose,onApplied,onReview,onDownload}:{fileId:string;revision:number;profile:Profile;onClose:()=>void;onApplied:()=>Promise<void>;onReview:()=>void;onDownload:()=>Promise<void>}){
@@ -96,7 +95,7 @@ export function AutomaticCleaning({fileId,revision,profile,onClose,onApplied,onR
  <section className="auto-cleaning-question"><label>How should duplicate rows be handled?<select aria-label="Duplicate rows" value={answers.duplicates} onChange={e=>setAnswers(a=>({...a,duplicates:e.target.value as Answers["duplicates"]}))}><option value="preserve">Keep duplicate rows</option><option value="remove">Remove duplicate rows — keep the first occurrence</option></select></label><small className="auto-example">{profile.duplicate_rows.toLocaleString()} full duplicate rows currently detected. Removal runs after your selected cleaning, compares every column, and can be undone. Rows sharing only some values are kept.</small></section>
  <label><input type="checkbox" checked={saveChoices} onChange={e=>setSaveChoices(e.target.checked)}/> Use these choices next time (saved in this browser after a successful run)</label>
  </fieldset>
- <p className="muted">Identifiers and columns with your manual corrections are preserved. Invalid values, ambiguous units, missing non-numeric values remain for manual cleaning. Duplicate rows are removed only if you choose that option. No currency conversion is performed.</p>
+ <p className="muted">Identifiers and columns with your manual corrections are preserved. Invalid values, ambiguous units, missing values are reviewed in the Imputation phase. Duplicate rows are removed only if you choose that option. No currency conversion is performed.</p>
  {error&&<p role="alert">{error}</p>}
  {busy?<div><p role="status">{job?.stage || "Analyzing and cleaning…"}</p><progress aria-label="Automatic cleaning progress" />{job&&<Button variant="outline" onClick={async()=>{try{await api(`/workflow-jobs/${job.id}/cancel`,{method:"POST"});}catch(e){setError((e as Error).message);}}}>Cancel cleaning</Button>}</div>:<Button onClick={start}>Start automatic cleaning</Button>}
  </>}

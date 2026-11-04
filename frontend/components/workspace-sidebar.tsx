@@ -1,5 +1,5 @@
 "use client";
-import { ChevronsLeft, ChevronsRight, Table2, FileText, BookOpen, FolderOpen, ShieldCheck, UserRound, Sun, Moon, LogOut, ChartColumn } from "lucide-react";
+import { ChevronsLeft, ChevronsRight, Table2, FileText, BookOpen, FolderOpen, UserRound, Sun, Moon, LogOut, ChartColumn } from "lucide-react";
 import { DataNeatMark } from "./dataneat-mark";
 import { useAccountNavigation } from "./account-access";
 
@@ -20,7 +20,6 @@ export function WorkspaceSidebar({ collapsed, onToggle, dark, onTheme, active = 
       <a className={`nav-item${active === "guide" ? " active" : ""}`} aria-current={active === "guide" ? "page" : undefined} href="/guide" aria-label="Website guide" title="Website guide"><BookOpen size={18} /><span className="sidebar-label">Website guide</span></a>
       <a className={`nav-item${active === "privacy" ? " active" : ""}`} aria-current={active === "privacy" ? "page" : undefined} href="/privacy" aria-label="Privacy policy" title="Privacy policy"><FileText size={18} /><span className="sidebar-label">Privacy policy</span></a>
     </nav>
-    <div className="sidebar-note"><ShieldCheck size={18} /><p>Original files preserved.<br />Your workspace stays private.</p></div>
     <div className="sidebar-bottom"><span className="avatar" aria-hidden="true"><UserRound size={16} /></span><div><strong>Personal workspace</strong><small>Temporary or saved files</small></div></div>
     <div className="sidebar-utilities"><button className="icon-button sidebar-theme-button" aria-label="Toggle dark mode" title="Toggle theme" onClick={onTheme}>{dark ? <Sun size={17} /> : <Moon size={17} />}<span className="sidebar-utility-label">{dark ? "Light mode" : "Dark mode"}</span></button></div>
     {accountNavigation && <div className="sidebar-account-actions" aria-label="Account actions">
