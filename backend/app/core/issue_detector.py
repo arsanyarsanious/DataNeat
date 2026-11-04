@@ -240,6 +240,9 @@ def value_family(value):
 
 
 def detect_odd_values(series, kind=None):
+    if kind == "percentage":
+        odd = [(i, v) for i, v in series.items() if not missing(v) and not is_percentage_number(v)]
+        return issue(series, "odd_value", [v for _, v in odd], row_indices=[int(i) for i, _ in odd], expected_type=kind)
     if kind in ('date', 'datetime'):
         odd = [(i, v) for i, v in series.items() if not missing(v) and not detect_date_pattern(v)]
         return issue(series, 'odd_value', [v for _, v in odd], row_indices=[int(i) for i, _ in odd], expected_type='date')
