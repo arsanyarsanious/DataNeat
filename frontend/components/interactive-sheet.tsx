@@ -828,6 +828,7 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
         <div
           role="dialog"
           aria-label={`Fix ${selection.column} row ${selection.row + 2}`}
+          key={JSON.stringify([selection.column, selection.row])}
           className="cell-fix-panel"
           style={{ width:"min(640px, calc(100vw - 24px))", maxWidth:"calc(100vw - 24px)", left: selection.left, top: selection.top }}
           onMouseEnter={() => {
@@ -1110,13 +1111,13 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
             </>}
             <details className="accept-finding"><summary>This value is correct</summary><p>Accept this finding without changing the data. Other checks still apply.</p><label className="setting">Accept for<select aria-label="Accept finding for" value={ignoreScope} onChange={e=>setIgnoreScope(e.target.value)}><option value="cell">This cell only</option><option value="matching">This value in this column</option><option value="column">This issue throughout this column</option></select></label><Button variant="outline" disabled={busy||!currentIssueKind} onClick={async () => { setBusy(true);setError(""); try { await workflowJob(fileId, sheet.revision, {operation:"decision",decision:{kind:"ignore",column:selection.column,issue:currentIssueKind,row_index:ignoreScope==="cell"?selection.row:null,value:ignoreScope==="column"?null:selection.value==null?null:String(selection.value),reason:"Reviewed and accepted by user"}}); setSelection(null);const updated=await api<Sheet>(sheetPath(stream.visiblePage));setSheet(updated);setSuccess({message:"Finding accepted. No data changed; you can undo this decision.",undoId:updated.changes.at(-1)?.id}); } catch(e) { setError((e as Error).message); } finally { setBusy(false); } }}>Accept as correct</Button></details>
             <div className="advanced-cell-link"><button className="advanced-settings-link" disabled={busy} onClick={() => { setSettingsColumn(selection.column); setSelection(null); }}>More column settings</button></div>
-          </div>
           {currentIssueKind !== "missing_marker" && <div className="cell-fix-footer">
             {blockingMessage&&<div id="cell-fix-blocking-error" className="blocking-action-error" role="alert"><AlertTriangle size={18} aria-hidden="true"/><div><strong>Cannot apply this change</strong><p>{blockingMessage}</p></div></div>}
             {!blockingMessage&&noPendingChange&&<p id="cell-fix-no-change" className="no-pending-change" role="status">No changes to apply. {action==="normalize_dates"?"Dates already in the selected format stay unchanged. Invalid or unconfirmed ambiguous dates are left unchanged.":"The selected cells already match this correction."}</p>}
             {!blockingMessage&&affectedCount===0&&interpretedDateCount>0&&<p id="cell-fix-date-confirmation" className="date-confirmation-summary" role="status">Confirm {format.replaceAll("_"," ")} for {interpretedDateCount} {interpretedDateCount===1?"date":"dates"}. The displayed values stay the same.</p>}
             <Button aria-describedby={blockingMessage?"cell-fix-blocking-error":noPendingChange?"cell-fix-no-change":affectedCount===0&&interpretedDateCount>0?"cell-fix-date-confirmation":undefined} disabled={busy || (dateMedian&&!dateEstimateAck) || affectedCount === null || noPendingChange || !!blockingMessage} onClick={() => fix(true)}><CheckCircle2 size={16} aria-hidden="true"/>Apply change</Button>
           </div>}
+          </div>
         </div>
       )}
     </section>
