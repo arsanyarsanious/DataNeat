@@ -374,6 +374,7 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
     const kind = kindOverride || cell.issues.find(issue => !["odd_value", "type", "duplicate"].includes(issue.kind))?.kind || cell.issues[0]?.kind || "";
     setDateEstimateAck(false);setDateRounding("floor");setCurrentIssueKind(kind); setQuickChoice(choice); setMoreOptions(false); setProposal(null);setIssueColumns([cell.column]);
     setAffectedCount(null); setCountError("");
+    if (kind === "percentage") {setAction("normalize_percentage");setFormat("add");setScope(bulk?"column":"cell");return;}
     if (choice === "custom") {setAction("replace");setScope(bulk?"issue":"cell");setValue(cell.value==null?"":String(cell.value));return;}
     setAction("replace"); setScope(bulk ? kind === "invalid_date" ? "invalid_dates" : "issue" : "cell"); setValue("");
     if (choice === "data_format") { const next=formatActionForType[sheet?.profile.columns.find(c=>c.column_name===cell.column)?.detected_type||""]||"normalize_number_format";setAction(next);setFormatParameters(formatDefaults(next));setScope(bulk?"column":"cell"); }
@@ -863,6 +864,7 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
             {currentIssueKind==="missing"&&["integer","decimal"].includes(selectedColumn?.detected_type||"")&&<Button variant="outline" disabled={busy||!imputationReadiness.ready} onClick={()=>setQualityTool({tool:"model_imputation",column:selection.column})}>Use KNN or Iterative imputation</Button>}
             {currentIssueKind === "missing_marker" ? <div className="marker-cell-choice"><p>Apply your choice to NA, null, empty and other recognized missing-value labels across this column. Actual blank cells stay empty.</p><Button disabled={busy} onClick={()=>void resolveMissingMarkers(selection.column,true)}>Convert labels to empty</Button><Button variant="outline" disabled={busy} onClick={()=>void resolveMissingMarkers(selection.column,false)}>Keep as text</Button></div> : <>
             {example&&<div className="correction-comparison" aria-label={`Correction example, row ${example.row_index+2}`}><div><small>Before · row {example.row_index+2}</small><span>{example.before==null||example.before===""?"(empty)":String(example.before)}</span></div><ArrowRight size={17} aria-hidden="true"/><div><small>After</small><strong>{example.after==null||example.after===""?"(empty)":String(example.after)}</strong></div></div>}
+            {currentIssueKind==="percentage" ? <label className="setting">Percentage notation<select aria-label="Percentage notation" disabled={busy} value={format} onChange={e=>{setFormat(e.target.value);invalidate();}}><option value="add">Include %</option><option value="remove">Remove %</option></select></label> : <>
             <div className="recommended-correction"><small>{quickChoice==="clear"||quickChoice==="constant"||quickChoice==="custom"?"Your correction":"Suggested correction"}</small><strong>{({trim:"Trim extra whitespace",boolean:"Standardize boolean labels",title:"Standardize capitalization: Title",dates:"Standardize unambiguous dates",time:"Standardize clock time",duration:"Standardize duration",duplicates:"Remove full duplicate rows",absolute:"Remove the minus sign",clear:"Clear affected cells",constant:"Replace with one value",custom:"Review and choose a correction",data_format:"Interpret this data format"} as Record<string,string>)[quickChoice]||imputationLabels[quickChoice]||quickChoice.replaceAll("_"," ")}</strong><Button size="sm" variant="ghost" disabled={busy} onClick={()=>{setMoreOptions(open=>!open);}}>Change correction</Button></div>
             {action==="normalize_boolean"&&<label className="setting">Boolean labels<select aria-label="Boolean output format" value={format} disabled={busy} onChange={e=>{setFormat(e.target.value);invalidate();}}><option value="true_false">true / false</option><option value="yes_no">Yes / No</option><option value="one_zero">1 / 0</option></select></label>}
             <details open={moreOptions} onToggle={e => setMoreOptions(e.currentTarget.open)} className="cell-more-options"><summary>More options</summary>
@@ -1065,7 +1067,7 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
                 />
               </label>
             )}
-            </details>
+            </details></>}
             {quickChoice === "constant" && !moreOptions && <label className="setting">Replacement value<input aria-label="Replacement value" value={value} disabled={busy} onChange={e=>{setValue(e.target.value);invalidate();}} placeholder="Enter one value for the affected cells"/></label>}
             {action === "impute_missing_values" && (
               <label className="setting">
