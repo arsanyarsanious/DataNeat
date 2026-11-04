@@ -10,7 +10,7 @@ from .duration import is_duration, format_duration
 from .cleaner import apply_cleaning_plan
 from .common import missing, scalar
 from .currency import parse_currency
-from .date_analyzer import is_ambiguous_numeric_date, is_valid_date
+from .date_analyzer import is_ambiguous_numeric_date, is_valid_date, is_invalid_calendar_date
 from .imputation import impute_missing_values
 from .percentage import is_percentage_number, parse_percentage
 from .phone import international_phone
@@ -133,7 +133,7 @@ def annotate(df, report, part, columns=None):
                         add(finding["issue"], "This value needs an explicit format interpretation or conversion. Choose the input conventions and review the result." if finding["issue"]=="data_format" else "This value is invalid under the detected format. Correct it or use the format controls to specify the intended interpretation.")
                 if c["detected_type"] == "time":
                     if not is_clock_time(value):
-                        add("invalid_time", "Invalid clock time. Correct the hour, minutes or seconds; clock hours must be below 24, or 1–12 with AM/PM.")
+                        add("invalid_time", "Invalid clock time. Correct the hour, minutes or seconds; clock hours must be below 24, or 1â€“12 with AM/PM.")
                     elif "time_format" in kinds:
                         add("time", "Clock time formats are mixed. Choose 24-hour or 12-hour AM/PM notation; the time of day is preserved.")
                 if c["detected_type"] == "duration":
@@ -152,7 +152,7 @@ def annotate(df, report, part, columns=None):
                         "whitespace",
                         "This value has extra whitespace. Trim edges and repeated spaces.",
                     )
-                if "invalid_dates" in kinds and not is_valid_date(value):
+                if "invalid_dates" in kinds and is_invalid_calendar_date(value):
                     add(
                         "invalid_date",
                         "This is not a valid calendar date. Correct it manually or clear it.",
@@ -267,13 +267,13 @@ def propose(df, body, cached_report=None):
                 raise ValueError("The selected cell does not have this issue anymore")
             result.loc[affected, column] = body.value
         elif body.scope == "invalid_dates":
-            if is_valid_date(df.loc[body.row_index, column]) or missing(df.loc[body.row_index, column]):
+            if not is_invalid_calendar_date(df.loc[body.row_index, column]):
                 raise ValueError("Select an invalid date cell before applying this scope")
             report = cached_report or profile_dataframe(df)
             kind = next(c["detected_type"] for c in report["columns"] if c["column_name"] == column)
             if kind not in ("date", "datetime"):
                 raise ValueError("This scope requires a detected date column")
-            mask = df[column].map(lambda value: not missing(value) and not is_valid_date(value))
+            mask = df[column].map(lambda value: not missing(value) and is_invalid_calendar_date(value))
             result.loc[mask, column] = body.value
         elif body.scope == "matching":
             selected = scalar(df.loc[body.row_index, column])

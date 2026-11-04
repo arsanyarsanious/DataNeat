@@ -3,7 +3,7 @@ from collections import defaultdict
 
 from .common import missing
 
-ANALYSIS_SCHEMA_VERSION = 8
+ANALYSIS_SCHEMA_VERSION = 9
 IMPUTATION_READINESS_POLICY = 1
 
 LABELS = {

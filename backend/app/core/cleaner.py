@@ -6,7 +6,7 @@ from .negative_values import absolute_values
 from .duration import normalize_durations
 from .common import missing, numeric
 from .currency import normalize_currency, parse_currency
-from .date_analyzer import is_valid_date, parse_date, parse_formatted_date, render_date
+from .date_analyzer import is_invalid_calendar_date, is_valid_date, parse_date, parse_formatted_date, render_date
 from .imputation import impute_missing_values
 from .percentage import normalize_percentage
 from .phone import normalize_phone
@@ -44,7 +44,7 @@ def normalize_numeric(series, settings):
             except ValueError:
                 number, marker = numeric(v), None
             # Preserve currency identity. Different currencies are never merged.
-            prefix = marker or (text[0] if text and text[0] in "$€£" else "")
+            prefix = marker or (text[0] if text and text[0] in "$â‚¬Â£" else "")
             result = format(number, "f")
             if "." in result:
                 result = result.rstrip("0").rstrip(".")
@@ -88,7 +88,7 @@ def resolve_invalid_dates(series, settings):
     if action == "empty":
         return result.map(
             lambda value: (
-                None if not missing(value) and not is_valid_date(value) else value
+                None if not missing(value) and is_invalid_calendar_date(value) else value
             )
         )
     if action != "manual":
@@ -100,7 +100,7 @@ def resolve_invalid_dates(series, settings):
             raise ValueError("Invalid row reference")
         if row not in result.index:
             raise ValueError("The selected row no longer exists")
-        if missing(result.loc[row]) or is_valid_date(result.loc[row]):
+        if missing(result.loc[row]) or not is_invalid_calendar_date(result.loc[row]):
             raise ValueError("Manual correction only applies to invalid dates")
         if replacement is not None:
             if (
