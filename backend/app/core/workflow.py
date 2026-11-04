@@ -173,7 +173,9 @@ def matches_intent(value, rule):
     try:
         if kind in ("text", "identifier", "category", "location"):
             return isinstance(value, str)
-        if kind in ("numeric", "salary", "currency", "percentage"):
+        if kind == "percentage":
+            parse_percentage(value)
+        elif kind in ("numeric", "salary", "currency"):
             number_for(value, rule)
         elif kind == "boolean":
             return is_boolean(value)
@@ -420,7 +422,7 @@ def profile_record(record, check=lambda: None):
                     add("rule_required", index, "A value is required by your column rule.")
                 continue
             if rule.get("type") and not matches_intent(value, rule):
-                add("rule_type", index, "Value conflicts with your declared type, currency label, percentage scale, or date interpretation.")
+                add("rule_type", index, "Value conflicts with your declared type, currency label, or date interpretation.")
             if not rule.get("allow_negative", True) and is_negative(value):
                 add("rule_negative", index, "Negative values are not allowed in this column. Remove the minus sign only if the magnitude is correct, replace the value, or clear it.", "error")
             if rule.get("unique") and duplicates.loc[index]:
