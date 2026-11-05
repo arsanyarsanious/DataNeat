@@ -32,7 +32,7 @@ SEED = 41729
 def validate_settings(settings):
     if not isinstance(settings, dict):
         raise ValueError("Choose model imputation settings")
-    unknown = set(settings) - {"method", "target", "helpers", "neighbors", "max_iter", "acknowledge"}
+    unknown = set(settings) - {"method", "target", "helpers", "neighbors", "max_iter", "acknowledge", "inconsistencies_acknowledged"}
     if unknown:
         raise ValueError(f"Unsupported model imputation setting: {sorted(unknown)[0]}")
     method = settings.get("method", "knn")
@@ -55,7 +55,7 @@ def validate_settings(settings):
     if type(acknowledge) is not bool:
         raise ValueError("Confirm that model-filled values are estimates")
     return dict(method=method, target=target, helpers=helpers[:], neighbors=neighbors,
-                max_iter=max_iter, acknowledge=acknowledge)
+                max_iter=max_iter, acknowledge=acknowledge, inconsistencies_acknowledged=settings.get("inconsistencies_acknowledged") is True)
 
 
 def _empty(value):
