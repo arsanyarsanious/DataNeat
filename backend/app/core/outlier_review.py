@@ -134,6 +134,15 @@ def apply(record, settings, check=lambda: None):
                 record.setdefault("outlier_acceptances", []).append({"column": config["column"], "row_index": item["row_index"], "value": str(item["before"]), "signature": detail["signature"]})
             else:
                 after.at[item["row_index"], config["column"]] = None if config["action"] == "clear" else config["value"] if config["action"] == "replace" else item["after"]
+                if config["action"] == "cap":
+                    # Resolve the reviewed value under this check even if later
+                    # edits shift its statistical bounds. Changed values are reviewed again.
+                    record.setdefault("outlier_acceptances", []).append({
+                        "column": config["column"],
+                        "row_index": item["row_index"],
+                        "value": str(scalar(after.at[item["row_index"], config["column"]])),
+                        "signature": detail["signature"],
+                    })
     detail.update(action=config["action"], affected_rows=0 if config["action"] == "save" else len(selected))
     return after, detail
 
