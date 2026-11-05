@@ -64,3 +64,18 @@ def test_custom_replacement_is_reviewed_and_targets_only_selected_outliers():
     assert detail["affected_rows"] == 1
     with pytest.raises(ValueError):
         apply(data, {**config, "value": "bad"})
+
+
+def test_cap_resolves_exact_reviewed_value_and_changed_value_is_rechecked():
+    data = record([10, 11, 12, 13, 14, 100, None])
+    settings = {"column": "Value", "action": "cap", "confirmed": True}
+    expected = review(data, settings)["findings"][0]["after"]
+    after, _ = apply(data, settings)
+    assert after.at[5, "Value"] == expected
+    data["editor_df"] = after
+    assert review(data, settings)["count"] == 0
+    # Subsequent changes to other values can tighten bounds around the reviewed cap.
+    data["editor_df"].loc[0:4, "Value"] = [1, 2, 3, 4, 5]
+    assert review(data, settings)["count"] == 0
+    data["editor_df"].at[5, "Value"] = 999
+    assert review(data, settings)["all_row_indices"] == [5]
