@@ -98,8 +98,8 @@ def column_readiness(record, column, check=lambda: None):
     return readiness_from_annotations(record, column)
 
 
-def ensure_imputation_ready(record, column, check=lambda: None):
+def ensure_imputation_ready(record, column, check=lambda: None, *, acknowledged=False):
     readiness = column_readiness(record, column, check)
-    if not readiness["ready"]:
+    if not readiness["ready"] and not acknowledged:
         raise ValueError(readiness["message"])
     return readiness
