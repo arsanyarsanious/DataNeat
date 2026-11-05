@@ -167,7 +167,11 @@ def install_workflows(app, store, editor_response, safe_export):
                         if candidate["editor_df"].empty: raise ValueError("No rows remain for this action")
                         fix["revision"] = candidate["editor_revision"]
                         fix["row_index"] = int(candidate["editor_df"].index[0])
-                    entries.append(apply_decision(candidate, step, check=lambda: check(job)))
+                    try:
+                        entries.append(apply_decision(candidate, step, check=lambda: check(job)))
+                    except ValueError as exc:
+                        column = (step.get("body") or {}).get("column", step.get("column", ""))
+                        raise ValueError(f"Plan step {number + 1} ({column}): {exc}") from exc
                 result = {"operations":entries,"changed_cells":sum(item["changed_cells"] for item in entries if item["action"] != "remove_duplicates"),"removed_rows":sum(item["changed_cells"] for item in entries if item["action"] == "remove_duplicates"),"revision":candidate["editor_revision"]}
             elif body.operation == "undo_run":
                 ids = [step["id"] for step in candidate["workflow_steps"] if step.get("automatic_run") == body.run_id]
