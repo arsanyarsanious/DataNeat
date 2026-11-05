@@ -78,7 +78,7 @@ def review(record, settings, check=lambda: None):
             skipped_group_rows += 1
             continue
         groups.setdefault(key, []).append(index)
-    bounds, findings, warnings = [], [], []
+    bounds, findings, warnings, distributions = [], [], [], []
     for key, indices in groups.items():
         check()
         observed = [values[index] for index in indices if index not in estimates]
@@ -100,14 +100,32 @@ def review(record, settings, check=lambda: None):
             raise ValueError("Outlier bounds overflowed; rescale these measurements first")
         boundary = {"group": list(key), "observed_count": len(observed), "lower": float(lower), "upper": float(upper)}
         bounds.append(boundary)
+        group_findings = []
         for index in indices:
             value = values[index]
             if lower <= value <= upper or (index, str(scalar(df.at[index, column]))) in accepted:
                 continue
             findings.append({"row_index": index, "spreadsheet_row": index + 2, "column": column, "before": scalar(df.at[index, column]), "after": float(min(max(value, lower), upper)), "lower": float(lower), "upper": float(upper), "group": list(key), "kind": "outlier", "message": f"Outside your {config['method'].upper()} review bounds [{lower:g}, {upper:g}]. This is a review suggestion, not proof of an error."})
+            group_findings.append(index)
+        if len(distributions) < 100:
+            all_values = np.array([values[index] for index in indices], dtype=float)
+            counts, edges = np.histogram(all_values, bins=24)
+            flagged_counts, _ = np.histogram([values[index] for index in group_findings], bins=edges)
+            q1, median, q3 = np.quantile(data, [.25, .5, .75])
+            distributions.append({
+                "group": list(key), "count": len(indices), "observed_count": len(observed),
+                "minimum": float(all_values.min()), "maximum": float(all_values.max()),
+                "q1": float(q1), "median": float(median), "q3": float(q3),
+                "lower": float(lower), "upper": float(upper),
+                "bins": [{"start": float(edges[i]), "end": float(edges[i + 1]),
+                          "count": int(count), "flagged": int(flagged_counts[i])}
+                         for i, count in enumerate(counts)],
+                "flagged_count": len(group_findings),
+                "points": [{"row": index + 2, "value": values[index]} for index in group_findings[:200]],
+            })
     if skipped_group_rows:
         warnings.append(f"{skipped_group_rows} rows have missing group keys and were not checked.")
-    return {"column": column, "method": config["method"], "count": len(findings), "findings": findings[:200], "all_row_indices": [item["row_index"] for item in findings], "bounds": bounds[:100], "group_count": len(groups), "warnings": list(dict.fromkeys(warnings))[:30], "coverage": "All rows checked within eligible groups; the displayed sample is limited to 200 findings and 100 group bounds.", "signature": signature, "_findings": findings}
+    return {"distributions": distributions, "column": column, "method": config["method"], "count": len(findings), "findings": findings[:200], "all_row_indices": [item["row_index"] for item in findings], "bounds": bounds[:100], "group_count": len(groups), "warnings": list(dict.fromkeys(warnings))[:30], "coverage": "All rows checked within eligible groups; the displayed sample is limited to 200 findings and 100 group bounds.", "signature": signature, "_findings": findings}
 
 
 def apply(record, settings, check=lambda: None):
