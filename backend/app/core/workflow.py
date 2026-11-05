@@ -603,7 +603,7 @@ def apply_decision(record, decision, step_id=None, revision=None, check=lambda: 
         body = EditorRequest(**decision["body"])
         if body.action == "impute_missing_values" and body.parameters.get("method", "mode") != "preserve":
             if enforce_imputation_readiness:
-                ensure_imputation_ready(record, body.column, check)
+                ensure_imputation_ready(record, body.column, check, acknowledged=body.parameters.get("inconsistencies_acknowledged") is True)
                 guarded_fill = True
         if settings_for(record).get(body.column, {}).get("type") == "identifier" and body.action not in ("replace", "trim_whitespace", "remove_duplicates"):
             raise ValueError("Declared identifiers are protected from automatic numeric/date/case conversions")
