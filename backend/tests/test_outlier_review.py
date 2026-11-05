@@ -51,3 +51,16 @@ def test_literals_identifiers_and_stale_row_selections_block():
     data.pop("column_rules")
     with pytest.raises(ValueError, match="no longer"):
         apply(data, {"column": "Value", "action": "clear", "confirmed": True, "row_indices": [0]})
+
+
+def test_custom_replacement_is_reviewed_and_targets_only_selected_outliers():
+    data = record([10, 11, 12, 13, 14, 100, 200, None])
+    config = {"column": "Value", "action": "replace", "value": "15",
+              "row_indices": [5], "confirmed": True, "multiplier": 0.5}
+    after, detail = apply(data, config)
+    assert after.at[5, "Value"] == 15
+    assert after.at[6, "Value"] == 200
+    assert after.at[7, "Value"] is None
+    assert detail["affected_rows"] == 1
+    with pytest.raises(ValueError):
+        apply(data, {**config, "value": "bad"})
