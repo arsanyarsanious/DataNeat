@@ -7,12 +7,12 @@ export function ImputationReadinessNotice({ column }: { column?: Column }) {
   const readiness = getImputationReadiness(column);
   if (readiness.ready) return null;
   return <div className="blocking-action-error" role="alert"><div>
-    <strong>Resolve other issues before filling missing values</strong>
-    <p>{readiness.message}</p>
+    <strong>Existing issues may affect your estimates</strong>
+    <p>Review the issues below before estimating missing values.</p>
     {readiness.blocking_issues.length > 0 && <ul>{readiness.blocking_issues.map(issue => <li key={issue.kind}>
       {issue.label}: {issue.count.toLocaleString()}{issue.example_rows.length ? ` · Spreadsheet rows ${issue.example_rows.slice(0, 3).join(", ")}` : ""}
     </li>)}</ul>}
-    <p>Correct, clear or explicitly accept the remaining issues, then return here. Leaving missing values unchanged is still available.</p>
+    <p>You may continue with the current data after accepting this risk, or return to cleaning.</p>
   </div></div>;
 }
 
@@ -43,7 +43,7 @@ export function ImputationControls({
   const column = columns.find((c) => c.column_name === operation.column);
   const info = column?.imputation;
   const readiness = getImputationReadiness(column);
-  const controlsDisabled = disabled || !readiness.ready;
+  const controlsDisabled = disabled;
   const method = imputationMethod(String(operation.parameters.method || "preserve"));
   const groups = (operation.parameters.group_by || []) as string[];
   const ordered = [
@@ -55,7 +55,6 @@ export function ImputationControls({
     "group_backward_fill",
   ].includes(method);
   function update(values: Record<string, unknown>) {
-    if (!readiness.ready && values.method && values.method !== "preserve") return;
     onChange({ ...operation.parameters, method, ...values, confirmed: false });
   }
   return (
@@ -68,6 +67,7 @@ export function ImputationControls({
         the actual count.
       </p>
       <ImputationReadinessNotice column={column} />
+      {!readiness.ready&&<label className="check"><input type="checkbox" disabled={disabled} checked={operation.parameters.inconsistencies_acknowledged===true} onChange={e=>update({inconsistencies_acknowledged:e.target.checked})}/>I accept that existing issues may affect estimates and want to continue with this data.</label>}
       {info && (
         <div className="imputation-recommendation">
           <strong>Suggested: {names[imputationMethod(info.method)]}</strong>
@@ -116,7 +116,7 @@ export function ImputationControls({
         >
           {imputationMethods(info?.available_methods || ["preserve", "constant", "mode"]).map(
             (m) => (
-              <option key={m} value={m} disabled={!readiness.ready && m !== "preserve"}>
+              <option key={m} value={m} >
                 {names[m]}
               </option>
             ),
