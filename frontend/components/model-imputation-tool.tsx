@@ -8,6 +8,7 @@ import { getImputationReadiness } from "@/lib/imputation-readiness";
 import { ImputationReadinessNotice } from "./imputation-controls";
 
 type ModelSettings = {
+  inconsistencies_acknowledged: boolean;
   method: "knn" | "iterative";
   target: string;
   helpers: string[];
@@ -62,12 +63,14 @@ export function ModelImputationTool({ columns, run, busy, saved, initialColumn }
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
-  const settings: ModelSettings = { method, target, helpers, neighbors, max_iter: maxIter };
+  const [riskAccepted,setRiskAccepted]=useState(false);
+  useEffect(()=>setRiskAccepted(false),[target]);
+  const settings: ModelSettings = { inconsistencies_acknowledged:riskAccepted, method, target, helpers, neighbors, max_iter: maxIter };
   const key = JSON.stringify(settings);
   const waiting = busy || pending;
   const targetColumn = targets.find(column => column.column_name === target);
   const readiness = getImputationReadiness(targetColumn);
-  const imputationBlocked = !readiness.ready;
+  const imputationBlocked = !readiness.ready&&!riskAccepted;
   const valid = !!targetColumn && !imputationBlocked
     && helpers.length > 0 && helpers.length <= 8
     && helpers.every(name => name !== target && helperColumns.some(column => column.column_name === name))
@@ -110,13 +113,13 @@ export function ModelImputationTool({ columns, run, busy, saved, initialColumn }
     {!targets.length ? <div className="quality-card"><strong>No eligible target columns</strong><p>Choose a plain numeric column with empty cells. Resolve missing-value labels first. Identifiers, dates, currency, percentages and text use their existing cleaning tools.</p></div> : <>
       <div className="quality-fields">
         <label>Measurement to fill<select aria-label="Measurement to fill" value={target} disabled={waiting} onChange={event => { setTarget(event.target.value); setHelpers(current => current.filter(name => name !== event.target.value)); }}>
-          {targets.map(column => <option key={column.column_name} value={column.column_name}>{column.column_name} · {column.missing_count.toLocaleString()} empty{getImputationReadiness(column).ready ? "" : " · Resolve other issues first"}</option>)}
+          {targets.map(column => <option key={column.column_name} value={column.column_name}>{column.column_name} · {column.missing_count.toLocaleString()} empty{getImputationReadiness(column).ready ? "" : " · Existing issues"}</option>)}
         </select></label>
         <label>Estimation method<select aria-label="Estimation method" value={method} disabled={waiting || imputationBlocked} onChange={event => setMethod(event.target.value as ModelSettings["method"])}>
           <option value="knn">KNN — similar rows</option><option value="iterative">Iterative — relationships between columns</option>
         </select></label>
       </div>
-      <ImputationReadinessNotice column={targetColumn} />
+      <ImputationReadinessNotice column={targetColumn} />{!readiness.ready&&<label className="check"><input type="checkbox" checked={riskAccepted} disabled={waiting} onChange={e=>setRiskAccepted(e.target.checked)}/>I accept that existing issues may affect estimates and want to continue.</label>}
       <fieldset disabled={waiting || imputationBlocked} className="quality-card">
         <legend>Related helper measurements</legend>
         <p className="quality-muted">Choose 1–8 columns that help explain {target || "the target"}. Avoid helpers calculated from the target or information unavailable at the time of the observation.</p>
