@@ -13,12 +13,12 @@ EMPTY = frozenset({""})
 
 
 def validate_settings(settings):
-    allowed = {"action", "column", "method", "multiplier", "group_by", "row_indices", "confirmed"}
+    allowed = {"action", "column", "method", "multiplier", "group_by", "row_indices", "confirmed", "value"}
     if set(settings) - allowed:
         raise ValueError("Unknown outlier settings")
     result = {"action": settings.get("action", "review"), "column": settings.get("column", ""), "method": settings.get("method", "iqr"), "multiplier": settings.get("multiplier", 1.5), "group_by": settings.get("group_by", []), "row_indices": settings.get("row_indices"), "confirmed": settings.get("confirmed", False)}
-    if result["action"] not in ("review", "save", "keep", "clear", "cap"):
-        raise ValueError("Choose review, save, keep, clear or cap")
+    if result["action"] not in ("review", "save", "keep", "clear", "cap", "replace"):
+        raise ValueError("Choose review, save, keep, clear, cap or replace")
     if not isinstance(result["column"], str) or not result["column"]:
         raise ValueError("Select a numeric measurement column")
     if result["method"] not in ("iqr", "mad"):
@@ -33,6 +33,8 @@ def validate_settings(settings):
         raise ValueError("Select valid original row indices, or all flagged rows")
     if type(result["confirmed"]) is not bool:
         raise ValueError("Confirmation must be a boolean")
+    if result["action"] == "replace":
+        result["value"] = number(settings.get("value"))
     return result
 
 
@@ -112,7 +114,7 @@ def apply(record, settings, check=lambda: None):
     config = validate_settings(settings)
     if config["action"] == "review":
         raise ValueError("Choose a reviewed outlier action")
-    if config["action"] in ("clear", "cap") and not config["confirmed"]:
+    if config["action"] in ("clear", "cap", "replace") and not config["confirmed"]:
         raise ValueError("Confirm the reviewed outlier correction")
     detail = review(record, config, check)
     findings = detail.pop("_findings")
@@ -131,7 +133,7 @@ def apply(record, settings, check=lambda: None):
             if config["action"] == "keep":
                 record.setdefault("outlier_acceptances", []).append({"column": config["column"], "row_index": item["row_index"], "value": str(item["before"]), "signature": detail["signature"]})
             else:
-                after.at[item["row_index"], config["column"]] = None if config["action"] == "clear" else item["after"]
+                after.at[item["row_index"], config["column"]] = None if config["action"] == "clear" else config["value"] if config["action"] == "replace" else item["after"]
     detail.update(action=config["action"], affected_rows=0 if config["action"] == "save" else len(selected))
     return after, detail
 
