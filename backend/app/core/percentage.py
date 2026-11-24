@@ -26,19 +26,28 @@ def is_percentage_number(value):
 
 def analyze_percentage_column(series):
     formats = Counter()
+    bare_examples = []
     for value in series:
         if missing(value):
             continue
         try:
             _, marked = parse_percentage(value)
             formats["with %" if marked else "without %"] += 1
+            if not marked and len(bare_examples) < 5:
+                bare_examples.append(str(value))
         except ValueError:
             pass
     return {
         "formats": dict(formats),
         "inconsistent": bool(formats["with %"] and formats["without %"]),
         "affected_rows": sum(formats.values()),
+        "bare_count": formats["without %"],
+        "bare_examples": bare_examples,
     }
+
+
+def bare_scale_is_declared(scale):
+    return scale in ("points", "ratio")
 
 
 def normalize_percentage(series, settings):

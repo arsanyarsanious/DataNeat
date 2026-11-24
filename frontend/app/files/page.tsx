@@ -51,7 +51,7 @@ export default function MyFilesPage() {
   }, []);
   useEffect(() => {
     setCollapsed(localStorage.getItem("dataneat-sidebar-collapsed") === "true");
-    const theme = localStorage.getItem("dataneat-theme") === "dark";
+    const theme = localStorage.getItem("dataneat-theme") !== "light";
     setDark(theme); document.documentElement.classList.toggle("dark", theme);
     void refresh();
   }, [refresh]);

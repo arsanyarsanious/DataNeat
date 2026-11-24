@@ -13,12 +13,12 @@ EMPTY = frozenset({""})
 
 
 def validate_settings(settings):
-    allowed = {"action", "column", "method", "multiplier", "group_by", "row_indices", "confirmed"}
+    allowed = {"action", "column", "method", "multiplier", "group_by", "row_indices", "confirmed", "value"}
     if set(settings) - allowed:
         raise ValueError("Unknown outlier settings")
     result = {"action": settings.get("action", "review"), "column": settings.get("column", ""), "method": settings.get("method", "iqr"), "multiplier": settings.get("multiplier", 1.5), "group_by": settings.get("group_by", []), "row_indices": settings.get("row_indices"), "confirmed": settings.get("confirmed", False)}
-    if result["action"] not in ("review", "save", "keep", "clear", "cap"):
-        raise ValueError("Choose review, save, keep, clear or cap")
+    if result["action"] not in ("review", "save", "keep", "clear", "cap", "replace"):
+        raise ValueError("Choose review, save, keep, clear, cap or replace")
     if not isinstance(result["column"], str) or not result["column"]:
         raise ValueError("Select a numeric measurement column")
     if result["method"] not in ("iqr", "mad"):
@@ -33,6 +33,8 @@ def validate_settings(settings):
         raise ValueError("Select valid original row indices, or all flagged rows")
     if type(result["confirmed"]) is not bool:
         raise ValueError("Confirmation must be a boolean")
+    if result["action"] == "replace":
+        result["value"] = number(settings.get("value"))
     return result
 
 
@@ -76,7 +78,7 @@ def review(record, settings, check=lambda: None):
             skipped_group_rows += 1
             continue
         groups.setdefault(key, []).append(index)
-    bounds, findings, warnings = [], [], []
+    bounds, findings, warnings, distributions = [], [], [], []
     for key, indices in groups.items():
         check()
         observed = [values[index] for index in indices if index not in estimates]
@@ -98,21 +100,39 @@ def review(record, settings, check=lambda: None):
             raise ValueError("Outlier bounds overflowed; rescale these measurements first")
         boundary = {"group": list(key), "observed_count": len(observed), "lower": float(lower), "upper": float(upper)}
         bounds.append(boundary)
+        group_findings = []
         for index in indices:
             value = values[index]
             if lower <= value <= upper or (index, str(scalar(df.at[index, column]))) in accepted:
                 continue
             findings.append({"row_index": index, "spreadsheet_row": index + 2, "column": column, "before": scalar(df.at[index, column]), "after": float(min(max(value, lower), upper)), "lower": float(lower), "upper": float(upper), "group": list(key), "kind": "outlier", "message": f"Outside your {config['method'].upper()} review bounds [{lower:g}, {upper:g}]. This is a review suggestion, not proof of an error."})
+            group_findings.append(index)
+        if len(distributions) < 100:
+            all_values = np.array([values[index] for index in indices], dtype=float)
+            counts, edges = np.histogram(all_values, bins=24)
+            flagged_counts, _ = np.histogram([values[index] for index in group_findings], bins=edges)
+            q1, median, q3 = np.quantile(data, [.25, .5, .75])
+            distributions.append({
+                "group": list(key), "count": len(indices), "observed_count": len(observed),
+                "minimum": float(all_values.min()), "maximum": float(all_values.max()),
+                "q1": float(q1), "median": float(median), "q3": float(q3),
+                "lower": float(lower), "upper": float(upper),
+                "bins": [{"start": float(edges[i]), "end": float(edges[i + 1]),
+                          "count": int(count), "flagged": int(flagged_counts[i])}
+                         for i, count in enumerate(counts)],
+                "flagged_count": len(group_findings),
+                "points": [{"row": index + 2, "value": values[index]} for index in group_findings[:200]],
+            })
     if skipped_group_rows:
         warnings.append(f"{skipped_group_rows} rows have missing group keys and were not checked.")
-    return {"column": column, "method": config["method"], "count": len(findings), "findings": findings[:200], "all_row_indices": [item["row_index"] for item in findings], "bounds": bounds[:100], "group_count": len(groups), "warnings": list(dict.fromkeys(warnings))[:30], "coverage": "All rows checked within eligible groups; the displayed sample is limited to 200 findings and 100 group bounds.", "signature": signature, "_findings": findings}
+    return {"distributions": distributions, "column": column, "method": config["method"], "count": len(findings), "findings": findings[:200], "all_row_indices": [item["row_index"] for item in findings], "bounds": bounds[:100], "group_count": len(groups), "warnings": list(dict.fromkeys(warnings))[:30], "coverage": "All rows checked within eligible groups; the displayed sample is limited to 200 findings and 100 group bounds.", "signature": signature, "_findings": findings}
 
 
 def apply(record, settings, check=lambda: None):
     config = validate_settings(settings)
     if config["action"] == "review":
         raise ValueError("Choose a reviewed outlier action")
-    if config["action"] in ("clear", "cap") and not config["confirmed"]:
+    if config["action"] in ("clear", "cap", "replace") and not config["confirmed"]:
         raise ValueError("Confirm the reviewed outlier correction")
     detail = review(record, config, check)
     findings = detail.pop("_findings")
@@ -131,7 +151,16 @@ def apply(record, settings, check=lambda: None):
             if config["action"] == "keep":
                 record.setdefault("outlier_acceptances", []).append({"column": config["column"], "row_index": item["row_index"], "value": str(item["before"]), "signature": detail["signature"]})
             else:
-                after.at[item["row_index"], config["column"]] = None if config["action"] == "clear" else item["after"]
+                after.at[item["row_index"], config["column"]] = None if config["action"] == "clear" else config["value"] if config["action"] == "replace" else item["after"]
+                if config["action"] == "cap":
+                    # Resolve the reviewed value under this check even if later
+                    # edits shift its statistical bounds. Changed values are reviewed again.
+                    record.setdefault("outlier_acceptances", []).append({
+                        "column": config["column"],
+                        "row_index": item["row_index"],
+                        "value": str(scalar(after.at[item["row_index"], config["column"]])),
+                        "signature": detail["signature"],
+                    })
     detail.update(action=config["action"], affected_rows=0 if config["action"] == "save" else len(selected))
     return after, detail
 

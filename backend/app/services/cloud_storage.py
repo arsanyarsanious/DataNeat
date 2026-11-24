@@ -53,7 +53,7 @@ class SupabaseSnapshots:
         signature = hmac.new(self.signing_key, compressed, hashlib.sha256).hexdigest()
         return signature + "." + base64.b64encode(compressed).decode()
 
-    def decode(self, payload, key, session):
+    def decode(self, payload, key, session=None):
         try:
             signature, encoded = payload.split(".", 1)
             compressed = base64.b64decode(encoded, validate=True)
@@ -65,7 +65,7 @@ class SupabaseSnapshots:
             if len(raw) > MAX_SNAPSHOT_BYTES or not decompressor.eof or decompressor.unused_data:
                 raise ValueError("size")
             record = pickle.loads(raw)
-            if record["id"] != key or record["session"] != session:
+            if record["id"] != key or (session is not None and record["session"] != session):
                 raise ValueError("identity")
             return record
         except Exception:
@@ -86,6 +86,15 @@ class SupabaseSnapshots:
         if not rows:
             raise KeyError(key)
         return self.decode(rows[0]["payload"], key, session)
+
+    def read_shared(self, key):
+        """Read by id only; the caller must have verified a signed share token."""
+        rows = self.request("GET", "dataneat_files", params={
+            "id": "eq." + key, "select": "payload", "limit": "1",
+        })
+        if not rows:
+            raise KeyError(key)
+        return self.decode(rows[0]["payload"], key)
 
     def list(self, owner, session):
         rows = self.request("GET", "dataneat_files", params={
@@ -108,6 +117,10 @@ class CloudStore(Store):
         self.remote = remote if remote is not None else SupabaseSnapshots()
         self.last_cloud_purge = 0
 
+    def save_local(self, record, *, retention_update=False):
+        """Persist locally first; the remote commit can follow in the background."""
+        return Store.save(self, record, retention_update=retention_update)
+
     def save(self, record, *, retention_update=False):
         with self.lock:
             if self.path(record["id"]).exists() and not retention_update:
@@ -129,6 +142,18 @@ class CloudStore(Store):
                 super().save(record, retention_update=True)
             return super().get(key, session)
 
+    def get_shared(self, key):
+        try:
+            return super().get_shared(key)
+        except KeyError:
+            record = self.remote.read_shared(key)
+            expires = self.expires_at(record)
+            if expires is not None and time.time() > expires:
+                raise KeyError(key) from None
+            # Cache locally without writing the remote row again.
+            Store.save(self, record, retention_update=True)
+            return record
+
     def account_files(self, owner, session):
         return self.remote.list(owner, session)
 
@@ -147,4 +172,3 @@ class CloudStore(Store):
             except HTTPException:
                 # Remote reads still enforce expiry; retry without killing cleanup.
                 pass
-

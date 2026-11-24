@@ -69,7 +69,7 @@ export function readReusableChoices(): { choices: ReusableChoice[]; warning: str
     const choices = value.slice(0, MAX_CHOICES).map(cleanChoice).filter((choice): choice is ReusableChoice => choice !== null);
     return { choices, warning: choices.length !== value.length ? "Some unsupported saved choices were ignored. Your spreadsheet has not changed." : "" };
   } catch {
-    return { choices: [], warning: "This browser could not read saved choices. You can still review suggested fixes." };
+    return { choices: [], warning: "This browser could not read saved choices. Your spreadsheet has not changed." };
   }
 }
 

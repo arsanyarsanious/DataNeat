@@ -124,7 +124,7 @@ export function AccountAccess({ children }: { children: ReactNode }) {
     return () => { if (dialog?.open) dialog.close(); };
   }, [usage]);
   useEffect(() => {
-    document.documentElement.classList.toggle("dark", localStorage.getItem("dataneat-theme") === "dark");
+    document.documentElement.classList.toggle("dark", localStorage.getItem("dataneat-theme") !== "light");
     let active = true;
     let unsubscribe: (() => void) | undefined;
     let sequence = 0;

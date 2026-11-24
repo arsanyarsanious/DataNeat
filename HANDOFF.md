@@ -1,5 +1,7 @@
 # DataNeat — continue in another chat
 
+> **Historical handoff — superseded on 21 October 2026.** Read [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) first for the current verified local application, unified interactive workflow, latest features, branding and tests. The older deployment, Advanced-mode and automatic-preparation descriptions below are retained as history and must not be treated as current behavior or a verified public deployment.
+
 ## Project and source
 
 - Repository: https://github.com/arsanyarsanious/DataNeat

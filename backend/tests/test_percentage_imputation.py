@@ -18,11 +18,24 @@ def test_percentage_imputation_is_numeric_and_preserves_notation(method):
 
 def test_percentage_mixed_scales_require_explicit_normalization():
     df = pd.DataFrame({"Rate": ["10%", None, "0.3"]})
-    with pytest.raises(ValueError, match="percentage points or fractions"):
+    with pytest.raises(ValueError, match="mixed"):
+        impute_missing_values(df, "Rate", "mean", {"percentage_scale": "points"})
+
+
+def test_bare_percentage_requires_declared_scale():
+    df = pd.DataFrame({"Rate": ["0.1", None, "0.3"]})
+    with pytest.raises(ValueError, match="no declared scale"):
         impute_missing_values(df, "Rate", "mean", {})
 
 
-def test_bare_ratio_scale_is_preserved():
+def test_bare_ratio_scale_is_scaled_to_percentage_points():
     df = pd.DataFrame({"Rate": ["0.1", None, "0.3"]})
-    result, _ = impute_missing_values(df, "Rate", "mean", {})
-    assert result.Rate.tolist() == ["0.1", .2, "0.3"]
+    result, audit = impute_missing_values(df, "Rate", "mean", {"percentage_scale": "ratio"})
+    assert result.Rate.tolist() == ["0.1", 20.0, "0.3"]
+    assert audit["imputed_count"] == 1
+
+
+def test_bare_points_scale_is_preserved():
+    df = pd.DataFrame({"Rate": ["0.1", None, "0.3"]})
+    result, _ = impute_missing_values(df, "Rate", "mean", {"percentage_scale": "points"})
+    assert result.Rate.tolist() == ["0.1", 0.2, "0.3"]

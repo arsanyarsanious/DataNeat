@@ -126,4 +126,5 @@ def test_saved_workflow_detection_upgrades_without_data_or_history_changes():
     after=store.get(fid,client.cookies.get('dataneat_session'))
     assert after['editor_df'].equals(before)
     assert after['editor_changes']==history
-    assert after['analysis_schema_version']==8
+    from app.core.imputation_readiness import ANALYSIS_SCHEMA_VERSION
+    assert after['analysis_schema_version']==ANALYSIS_SCHEMA_VERSION

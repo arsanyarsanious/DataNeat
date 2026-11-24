@@ -158,7 +158,7 @@ def number_for(value, rule):
     if rule.get("type") == "percentage":
         amount, marked = parse_percentage(value)
         if not marked and not rule.get("percentage_scale"):
-            raise ValueError("Declare bare percentage scale")
+            raise ValueError("Declare whether bare percentage values mean points or ratios in Column settings before using this rule")
         return amount * 100 if not marked and rule.get("percentage_scale") == "ratio" else amount
     if rule.get("type") == "currency":
         amount, marker = parse_currency(value)
@@ -173,7 +173,9 @@ def matches_intent(value, rule):
     try:
         if kind in ("text", "identifier", "category", "location"):
             return isinstance(value, str)
-        if kind in ("numeric", "salary", "currency", "percentage"):
+        if kind == "percentage":
+            parse_percentage(value)
+        elif kind in ("numeric", "salary", "currency"):
             number_for(value, rule)
         elif kind == "boolean":
             return is_boolean(value)
@@ -367,7 +369,7 @@ def workflow_annotations(df, report, part, columns=None, ignored=None):
                 if int(index) in indices:
                     cell.append({"kind": finding["issue"], "message": finding["message"], "classification": "invalid" if finding["severity"] == "error" else "review"})
             for item in cell:
-                item.setdefault("classification", "review" if item["kind"] in ("missing", "odd_value", "ambiguous_date", "duplicate") else "inconsistency" if item["kind"] in ("data_format", "time", "duration", "capitalization", "date_format", "currency", "percentage", "boolean", "whitespace", "symbol", "phone") else "invalid")
+                item.setdefault("classification", "review" if item["kind"] in ("missing", "odd_value", "ambiguous_date", "duplicate", "percentage_scale") else "inconsistency" if item["kind"] in ("data_format", "time", "duration", "capitalization", "date_format", "currency", "percentage", "boolean", "whitespace", "symbol", "phone") else "invalid")
             accepted = [entry for entry in (*accepted_by_cell.get((column, None), []), *accepted_by_cell.get((column, int(index)), [])) if (entry.get("value") is None or entry["value"] == str(scalar(df.at[index, column])) or isinstance(df.at[index, column], bool) and entry["value"].casefold() == str(df.at[index, column]).casefold())]
             cell[:] = [item for item in cell if not any(entry["issue"] in ("*", item["kind"]) for entry in accepted)]
     return rows
@@ -420,7 +422,7 @@ def profile_record(record, check=lambda: None):
                     add("rule_required", index, "A value is required by your column rule.")
                 continue
             if rule.get("type") and not matches_intent(value, rule):
-                add("rule_type", index, "Value conflicts with your declared type, currency label, percentage scale, or date interpretation.")
+                add("rule_type", index, "Value conflicts with your declared type, currency label, or date interpretation.")
             if not rule.get("allow_negative", True) and is_negative(value):
                 add("rule_negative", index, "Negative values are not allowed in this column. Remove the minus sign only if the magnitude is correct, replace the value, or clear it.", "error")
             if rule.get("unique") and duplicates.loc[index]:
@@ -601,7 +603,7 @@ def apply_decision(record, decision, step_id=None, revision=None, check=lambda: 
         body = EditorRequest(**decision["body"])
         if body.action == "impute_missing_values" and body.parameters.get("method", "mode") != "preserve":
             if enforce_imputation_readiness:
-                ensure_imputation_ready(record, body.column, check)
+                ensure_imputation_ready(record, body.column, check, acknowledged=body.parameters.get("inconsistencies_acknowledged") is True)
                 guarded_fill = True
         if settings_for(record).get(body.column, {}).get("type") == "identifier" and body.action not in ("replace", "trim_whitespace", "remove_duplicates"):
             raise ValueError("Declared identifiers are protected from automatic numeric/date/case conversions")
@@ -639,7 +641,8 @@ def apply_decision(record, decision, step_id=None, revision=None, check=lambda: 
                 if body.action=="impute_missing_values":
                     sources={index:fmt for (name,index),fmt in known_date_formats(record).items() if name==body.column}
                     excluded=[index for name,index in estimated_cells(record) if name==body.column]
-                    runtime_body=body.model_copy(update={"parameters":{**body.parameters,"_source_formats":sources,"_excluded_rows":excluded}})
+                    scale=(settings_for(record).get(body.column,{}) or {}).get("percentage_scale","")
+                    runtime_body=body.model_copy(update={"parameters":{**body.parameters,"_source_formats":sources,"_excluded_rows":excluded,"_percentage_scale":scale}})
                 if body.action=="normalize_dates":
                     sources={index:fmt for (name,index),fmt in known_date_formats(record).items() if name==body.column}
                     runtime_body=body.model_copy(update={"parameters":{**body.parameters,"_source_formats":sources}})

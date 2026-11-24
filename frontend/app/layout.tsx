@@ -14,11 +14,13 @@ import "./dashboard-refresh.css";
 import "./readability.css";
 import "./sidebar-account.css";
 import "./column-presentation.css";
+import "./auto-cleaning-survey.css";
+import "./premium-theme.css";
 import { AccountAccess } from "@/components/account-access";
 const manrope = localFont({
-  src: "./fonts/Manrope-Variable.ttf",
+  src: "./fonts/InterVariable.woff2",
   variable: "--font-dataneat",
-  weight: "200 800",
+  weight: "100 900",
   display: "swap",
 });
 export const metadata: Metadata = {

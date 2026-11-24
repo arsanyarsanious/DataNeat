@@ -3,6 +3,7 @@ import re
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 from .workflow import manual_acceptances
+from .percentage import analyze_percentage_column
 
 class ColumnException(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -43,17 +44,23 @@ def automatic_steps(record, answers):
         if col.get("missing_marker_review", {}).get("count"):
             skipped.append(f"{name}: review possible missing-value labels before automatic cleaning.")
             continue
-        if name in protected or kind == "identifier":
+        declared = (record.get("column_rules") or {}).get(name, {}).get("type", "")
+        if name in protected or kind == "identifier" or declared == "identifier":
             skipped.append(f"{name}: preserved identifier or existing user-entered corrections.")
             continue
+        scale = (record.get("column_rules") or {}).get(name, {}).get("percentage_scale", "")
+        if (kind == "percentage" or declared == "percentage") and not scale:
+            if analyze_percentage_column(record["editor_df"][name])["bare_count"]:
+                skipped.append(f"{name}: bare percentage values need a declared points/ratio scale before automatic cleaning.")
+                continue
         if policy["trim"] and any(isinstance(value, str) and re.sub(r"\s+", " ", value.strip()) != value for value in record["editor_df"][name]):
             fix(name, "trim_whitespace", {})
         if kind == "boolean" and policy["boolean"] != "preserve":
             fix(name, "normalize_boolean", {"format":policy["boolean"]})
         if kind in ("text", "category", "categorical") and policy["capitalization"] != "preserve":
             fix(name, "normalize_capitalization", {"strategy":policy["capitalization"]})
-        if kind in ("date", "datetime") and policy["dates"] != "preserve":
-            fix(name, "normalize_dates", {"interpretation":"preserve" if policy["dates"] == "unambiguous" else policy["dates"], "include_time":kind == "datetime", "output_format":policy["date_output"]})
+        if (kind in ("date", "datetime") or declared in ("date", "datetime")) and policy["dates"] != "preserve":
+            fix(name, "normalize_dates", {"interpretation":"preserve" if policy["dates"] == "unambiguous" else policy["dates"], "include_time":kind == "datetime" or declared == "datetime", "output_format":policy["date_output"]})
         # Restrict automatic estimates to ordinary numeric measurements; units and
         # currency/percentage scales require explicit column-level interpretation.
         if policy["missing"] != "preserve" and col.get("missing_count"):

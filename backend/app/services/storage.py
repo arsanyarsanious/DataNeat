@@ -84,6 +84,10 @@ class Store:
         else:
             record.pop("expires_at", None)
 
+    def save_local(self, record, *, retention_update=False):
+        """Write the local snapshot without the cloud round-trip."""
+        return Store.save(self, record, retention_update=retention_update)
+
     def save(self, record, *, retention_update=False):
         with self.lock:
             path = self.path(record["id"])
@@ -119,6 +123,25 @@ class Store:
             start = (expires or (float(record["created"]) + 86400)) - 86400
             os.utime(path, (start, start))
             if record["session"] != session or (expires is not None and time.time() > expires):
+                raise KeyError(key)
+            return record
+
+    def get_shared(self, key):
+        """Read one stored file for a signed share link; no session is available.
+
+        Authorization comes from the signed token, so this must never be used
+        for arbitrary reads: it skips the owner-session comparison but still
+        honors temporary retention and saved-file protection.
+        """
+        with self.lock:
+            path = self.path(key)
+            if not path.exists():
+                raise KeyError(key)
+            with path.open("rb") as handle:
+                record = pickle.load(handle)
+            self._apply_retention(record, self._retention(key))
+            expires = self.expires_at(record)
+            if expires is not None and time.time() > expires:
                 raise KeyError(key)
             return record
 

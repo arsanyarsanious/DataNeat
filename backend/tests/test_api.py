@@ -340,7 +340,8 @@ def test_percentage_api_formats_preserve_original_and_meaning(client):
         ["20"],
         ["30"],
     ]
-    assert "10\n20\n30" in client.get(f"/api/jobs/{job}/download").text
+    csv_rows = client.get(f"/api/jobs/{job}/download").text.lstrip("\ufeff").splitlines()
+    assert csv_rows[1:] == ["10", "20", "30"]
     assert client.get(f"/api/files/{fid}/preview").json()["rows"] == [
         ["10%"],
         ["0.2"],

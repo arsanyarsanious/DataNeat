@@ -3,7 +3,7 @@ from collections import defaultdict
 
 from .common import missing
 
-ANALYSIS_SCHEMA_VERSION = 8
+ANALYSIS_SCHEMA_VERSION = 10
 IMPUTATION_READINESS_POLICY = 1
 
 LABELS = {
@@ -19,6 +19,7 @@ LABELS = {
     "boolean": "Inconsistent boolean labels",
     "currency": "Mixed currency notation",
     "percentage": "Mixed percentage notation",
+    "percentage_scale": "Bare percentage scale not declared",
     "symbol": "Mixed numeric symbols or labels",
     "phone": "Phone issues",
     "duplicate": "Duplicate rows",
@@ -98,8 +99,8 @@ def column_readiness(record, column, check=lambda: None):
     return readiness_from_annotations(record, column)
 
 
-def ensure_imputation_ready(record, column, check=lambda: None):
+def ensure_imputation_ready(record, column, check=lambda: None, *, acknowledged=False):
     readiness = column_readiness(record, column, check)
-    if not readiness["ready"]:
+    if not readiness["ready"] and not acknowledged:
         raise ValueError(readiness["message"])
     return readiness

@@ -125,6 +125,11 @@ def _validate_columns(record, rules):
             if rule["kind"] != "required_if" and rule["value_type"] in ("numeric", "date"):
                 if column not in cache:
                     cache[column] = configured.get(column, {}).get("type") or profile.get(column) or detect_column_type(df[column])["type"]
+                if rule["value_type"] == "numeric" and cache[column] == "percentage":
+                    from .percentage import analyze_percentage_column
+                    analysis = analyze_percentage_column(df[column])
+                    if analysis["bare_count"] and not analysis["formats"].get("with %"):
+                        raise ValueError(f'Column "{column}" is a percentage column with bare numbers. Declare its percentage scale in Column settings and normalize it to plain numbers before cross-column arithmetic.')
                 if cache[column] == "identifier":
                     raise ValueError(f'Column "{column}" is a protected identifier. Use text comparison instead')
     return configured

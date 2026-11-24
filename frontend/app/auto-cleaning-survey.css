@@ -1,0 +1,62 @@
+/* Numbered, clearly spaced automatic-cleaning survey. Loaded last so it wins
+   over the historical question styles without touching cleaning behavior. */
+.auto-cleaning-questions {
+  counter-reset: auto-question;
+  gap: 30px;
+}
+.auto-cleaning-question {
+  counter-increment: auto-question;
+  position: relative;
+  padding-left: 48px;
+  gap: 10px;
+}
+.auto-cleaning-question::before {
+  content: counter(auto-question);
+  position: absolute;
+  left: 0;
+  top: -3px;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--green);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+.dark .auto-cleaning-question::before {
+  background: #217346;
+  color: #eafff2;
+  box-shadow: 0 0 0 4px rgba(33, 115, 70, 0.35);
+}
+.auto-cleaning-question > label {
+  color: var(--green);
+  font-weight: 650;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.auto-cleaning-question > label:has(input) {
+  gap: 10px;
+}
+.auto-cleaning-question select {
+  color: var(--text);
+  font-weight: 600;
+}
+.auto-cleaning-question .auto-example {
+  margin-top: 2px;
+}
+@media (max-width: 480px) {
+  .auto-cleaning-questions {
+    gap: 24px;
+  }
+  .auto-cleaning-question {
+    padding-left: 40px;
+  }
+  .auto-cleaning-question::before {
+    width: 26px;
+    height: 26px;
+    font-size: 12px;
+  }
+}

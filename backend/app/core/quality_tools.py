@@ -27,7 +27,7 @@ def review(record, settings, check=lambda: None):
     config = validate_settings(settings)
     if config["tool"] == "model_imputation":
         from .imputation_readiness import ensure_imputation_ready
-        ensure_imputation_ready(record, config["target"], check)
+        ensure_imputation_ready(record, config["target"], check, acknowledged=config.get("inconsistencies_acknowledged") is True)
     return public_detail(module(config.pop("tool")).review(record, config, check))
 
 
@@ -35,6 +35,6 @@ def apply(record, settings, check=lambda: None, *, enforce_imputation_readiness=
     config = validate_settings(settings)
     if config["tool"] == "model_imputation" and enforce_imputation_readiness:
         from .imputation_readiness import ensure_imputation_ready
-        ensure_imputation_ready(record, config["target"], check)
+        ensure_imputation_ready(record, config["target"], check, acknowledged=config.get("inconsistencies_acknowledged") is True)
     after, detail = module(config.pop("tool")).apply(record, config, check)
     return after, public_detail(detail)

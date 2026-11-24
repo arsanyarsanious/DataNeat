@@ -26,4 +26,3 @@ def install_static_site(app):
     directory = os.getenv("STATIC_DIR")
     if directory:
         app.mount("/", ExportedSite(directory=directory, html=True), name="frontend")
-

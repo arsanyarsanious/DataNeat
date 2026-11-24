@@ -1,0 +1,19 @@
+# Unified interactive workspace — 2026-10-18
+
+The workspace now opens only the interactive sheet. The separate original-upload analysis and checkbox plan screens are retired from the UI; earlier server endpoints remain for compatibility. Restoring an existing workspace opens the same editor working copy. Legacy browser metadata is retained separately when applicable.
+
+Column settings opens an accessible in-place dialog from a column header, the sheet tools button, or the cell correction panel. Settings includes grouped and ordered imputation, currency-aware notation, percentage rescaling, phone/unit formats, date interpretation, invalid-date clearing, numeric and boolean normalization, duplicate subsets and column renaming. Insights uses the current editor profile. Plans stage up to 100 whole-column actions, preview sequential changes without saving, and commit only after every action and final profiling succeeds. Each committed action remains individually represented in replayable history.
+
+Plan operations use existing owner/session checks, revision checks, cancellation, background jobs and atomic snapshot commits. Rename moves column rules, preparation overrides and ignored findings, records a header change, invalidates profile caches and supports undo. Plan previews include per-action examples and imputation before/after statistics. Draft plans persist in the same browser tab. A pending apply job is tracked separately to prevent accidentally reapplying a completed plan after refresh.
+
+Theme: charcoal #262626 page, #303030 surfaces, #353535 sidebar; Excel-like #217346 selected navigation, primary buttons and sheet headings. Muted text and issue colors remain legible. Cover remains stationary except for issue-color fades; saved theme applies to cover and login.
+
+Navigation: cover / → Begin cleaning → /login → /workspace. Configured sign-in redirects to workspace, including an existing session. Authentication remains unconfigured in this local installation; login accurately displays disabled account controls and an explicit local-workspace continuation. No credentials or paid services were provisioned.
+
+Validation: 201 backend tests passed, including current-copy continuity, noncommitting previews, all-or-nothing plan failure, rename/rule/undo integrity, subset deduplication, invalid-date clearing and imputation/percentage results. Production frontend build and TypeScript checks passed. Browser checks use an isolated synthetic upload, never the user's working dataset.
+
+Imputed estimates are marked with dotted underlines in the current sheet; manual replacement clears that cell's estimate marker, rename carries markers to the new column, and undo restores their prior meaning. Plan review includes optional before/after category frequencies. PDF reports include imputation counts and numeric distribution changes.
+
+Browser QA verified cover → login → local workspace, current-copy preservation across direct edits and plan application, grouped median calculation, independent-step undo, same-tab recovery after navigation, absence of the retired Advanced mode, and a mobile dialog without internal horizontal overflow. Screenshots are in the task output directory.
+
+Manual replacement values, approved text mappings and explicitly entered imputation constants are accepted only in their changed cells. They are not independently verified. Acceptance is derived from surviving per-cell audit entries, follows renames, and disappears when the value is changed by a later operation or its step is undone. Existing enhanced-workflow manual edits are rechecked once on workspace initialization. Automatic statistical estimates and untouched cells retain their checks. Per-cell lookup indexes keep bulk approvals from causing a scan of every approval for every dataset cell.

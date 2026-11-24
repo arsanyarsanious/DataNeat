@@ -22,8 +22,8 @@ const sections: GuideSection[] = [
     keywords: "upload begin login csv xlsx excel analysis quickstart getting started",
     items: [
       { title: "1. Upload", text: "Choose Begin cleaning, continue through the login page, then upload a CSV or XLSX file. For an Excel workbook, select the worksheet you want to clean. When accounts are not configured, choose Continue to local workspace." },
-      { title: "2. Explore", text: "See a preview and real counts from your uploaded data, then choose how to clean. Clean manually opens the interactive sheet. Clean automatically asks a short optional questionnaire. Both paths use the same working copy, so you can switch to Automatic cleaning from the sheet without starting over." },
-      { title: "3. Review", text: "Check the suggested fixes, follow Guided cleaning, or open a highlighted cell. Choose the correction first, then its scope. Review the proposed result before applying it." },
+      { title: "2. Explore", text: "See a preview and real counts from your uploaded data, then open the spreadsheet for a manual review. Guided cleaning and Automatic cleaning are available in the sheet at any time. Everything uses the same working copy." },
+      { title: "3. Review", text: "Open flagged cells yourself, choose the correction first and its scope second, then review the proposed result before applying it. Nothing changes without your confirmation." },
       { title: "4. Export", text: "See what changed and what still needs attention, then prepare Excel, CSV, or a PDF report. Excel exports contain only the selected worksheet as a data table. Other sheets, workbook formatting, charts and executable formulas are not preserved. Your original upload is preserved separately." },
     ],
     note: "An issue flag is a reason to review a value. It does not always mean the value is wrong.",
@@ -31,10 +31,10 @@ const sections: GuideSection[] = [
   },
   {
     id: "faster-cleaning", title: "Clean with fewer steps",
-    summary: "Use one review for related corrections, or work through one decision at a time.",
-    keywords: "suggested fixes combined preview bulk guided cleaning next progress completion reusable saved choices more options",
+    summary: "Start with a manual review; guided cleaning is available in the sheet whenever you want it.",
+    keywords: "manual review guided cleaning next progress completion reusable saved choices more options",
     items: [
-      { title: "Review suggested fixes together", text: "Review the proposed corrections in one place, choose the ones you want, and inspect the combined preview before applying the selection. Nothing changes merely because a suggestion appears." },
+      { title: "Review manually first", text: "Open flagged cells yourself and apply the corrections you trust. Guided cleaning and automatic cleaning are available inside the sheet whenever you want them; they never change data without your confirmation." },
       { title: "Solve a whole issue type", text: "When a correction supports it, choose all cells with the same issue in the selected column. For example, clear or replace all invalid dates in one command even when their text is different. Other corrections can target the same value or all eligible column values." },
       { title: "Guided cleaning", text: "Focus on one issue type at a time. Open its correction, fix it, or skip it for this review. The guide keeps the next decision visible so you do not need to search the entire sheet." },
       { title: "More options when you need them", text: "The main correction appears first. Open More options for additional controls instead of working through every setting for a simple fix. You still choose where the correction applies." },
@@ -75,7 +75,7 @@ const sections: GuideSection[] = [
     items: [
       { title: "Choose your policies", text: "The survey covers trimming, boolean labels, capitalization, date interpretation and output, missing numeric measurements, and exact duplicate rows. Keep values unchanged wherever you do not want a transformation. Duplicate removal keeps the first copy of a full duplicate row." },
       { title: "Add exceptions", text: "A default policy can have different choices for individual columns. For example, use Title for city names and lower for another text column. Duplicate-row removal is a file-level choice." },
-      { title: "Continue from manual work", text: "The Automatic cleaning button is available inside the interactive sheet. Opening or cancelling the questionnaire preserves your existing edits. Starting the run applies your chosen policies; you do not confirm each cell separately." },
+      { title: "Continue from manual work", text: "The Automatic cleaning button is available inside the interactive sheet at any time. Opening or cancelling the questionnaire preserves your existing edits. Starting the run applies your chosen policies; you do not confirm each cell separately." },
       { title: "Review what was preserved", text: "Identifiers, columns with accepted manual corrections, and unresolved missing-label columns are protected from automatic changes. Ambiguous units, invalid values, complex estimates, and record merges require their own review. Automatic cleaning does not run every advanced converter." },
       { title: "Filling waits until the column is ready", text: "Automatic cleaning fills missing numeric values only after other findings in that target column have been resolved. If a column still has another issue, its fill is skipped and the result explains the reason. Correct, clear, or accept the remaining values before trying the fill again." },
     ],
@@ -88,7 +88,7 @@ const sections: GuideSection[] = [
     items: [
       { title: "Text and equivalent spellings", text: "Trim whitespace, choose Title / UPPER / lower, or use Unify text values to map selected spellings to a name you provide. Similar-spelling suggestions need your review; matching spellings does not prove two values mean the same thing." },
       { title: "Booleans", text: "Unify true/false, yes/no, y/n, and 1/0 into the representation you choose for the column." },
-      { title: "Choose a column data type", text: "Open the three-dot Settings button in a column heading, then choose Column data type and Save data type. Your choice overrides the column name and automatic detection. Choose Text, Number, Salary, Serial / identifier, Phone, Email, Date, Date and time, Clock time, Duration, Location, Coordinates, Currency, Percentage, Boolean, URL or IP address. Values are unchanged. Auto restores detection; History can undo the choice. Serial / identifier protects leading zeros. Salary is an ordinary numeric amount and does not assign a currency." },
+      { title: "Choose a column data type", text: "Open the three-dot Settings button in a column heading, then choose Column data type and Save data type. Your choice overrides the column name and automatic detection. Choose Text, Category, Number, Serial / identifier, Phone, Email, Boolean, Date, Date and time, Clock time, Duration, Location, Coordinates, Currency, Percentage, URL or IP address. Values are unchanged. Auto restores detection; History can undo the choice. Serial / identifier protects leading zeros. For Percentage columns, also declare whether bare numbers mean ratios (0.96 = 96%) or percentage points (0.96 = 0.96%)." },
       { title: "Original Excel colors and formula results", text: "Original cell colors are hidden by default. Use Show original colors in Explore or Review to display solid fills; warning icons and colored edges still identify issues. This display preference does not modify data or preserve formatting in cleaned exports. Conditional formatting and non-solid fills are not reproduced. Formula cells show their last saved Excel results, not the formula expression. DataNeat does not recalculate formulas. If results are missing, open the workbook in Excel, recalculate, save and upload it again." },
       { title: "Amounts, percentages, and contact fields", text: "Standardize supported currency or percentage notation with an explicit interpretation for bare percentages. Currency conversion between exchange rates is not provided. Phone formatting may need country information. Email and phone checks validate form, not whether the address or number exists." },
       { title: "Odd values and negative values", text: "A text value among numbers, or a percentage among currency amounts, can be flagged for review. Negative values are allowed by default. Disallow them in Column settings or Column rules when the column requires it, then review removing the sign, clearing, or replacing them." },
@@ -101,7 +101,7 @@ const sections: GuideSection[] = [
     summary: "Choose how input is interpreted separately from how the result is displayed.",
     keywords: "date day first month first dd/mm/yyyy slash dash am pm 12 hour 24 hour duration compound pt45m time",
     items: [
-      { title: "Date input and output", text: "Choose Day first or Month first when an input such as 03/04/2024 could mean either date. Output choices include YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY, YYYY/MM/DD, DD-MM-YYYY, and MM-DD-YYYY. Include time when needed. An impossible calendar date cannot be fixed just by changing its display format." },
+      { title: "Date input and output", text: "Choose Day first or Month first when an input such as 03/04/2024 could mean either date. That choice resolves ambiguous values: they are rewritten in the selected output format, so day-first with YYYY-MM-DD turns 03/04/2024 into 2024-04-03. Output choices include YYYY-MM-DD, DD/MM/YYYY, MM/DD/YYYY, YYYY/MM/DD, DD-MM-YYYY, and MM-DD-YYYY. Include time when needed. An impossible calendar date cannot be fixed just by changing its display format." },
       { title: "Clock time", text: "A time of day can use AM/PM or a 24-hour clock. Choose a 12-hour or 24-hour output. A clock time is different from an elapsed duration." },
       { title: "Elapsed duration", text: "Recognize forms such as PT45M, 45 min, 1 day 3 hours, or 1d3h30m15s and standardize them to elapsed HH:MM:SS. Hours can exceed 24 without wrapping. Compound English unit expressions are supported." },
       { title: "Date estimates and numeric timestamps", text: "Date median and verified date-pattern completion are available for missing dates. Unix and Excel serial dates need an explicit source format; timezone conversion needs explicit zone choices. These are separate from choosing slashes or dashes." },
@@ -225,7 +225,7 @@ export default function GuidePage() {
   const [query, setQuery] = useState("");
   useEffect(() => {
     setCollapsed(localStorage.getItem("dataneat-sidebar-collapsed") === "true");
-    const savedDark = localStorage.getItem("dataneat-theme") === "dark";
+    const savedDark = localStorage.getItem("dataneat-theme") !== "light";
     setDark(savedDark);
     document.documentElement.classList.toggle("dark", savedDark);
   }, []);

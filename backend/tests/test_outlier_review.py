@@ -51,3 +51,53 @@ def test_literals_identifiers_and_stale_row_selections_block():
     data.pop("column_rules")
     with pytest.raises(ValueError, match="no longer"):
         apply(data, {"column": "Value", "action": "clear", "confirmed": True, "row_indices": [0]})
+
+
+def test_custom_replacement_is_reviewed_and_targets_only_selected_outliers():
+    data = record([10, 11, 12, 13, 14, 100, 200, None])
+    config = {"column": "Value", "action": "replace", "value": "15",
+              "row_indices": [5], "confirmed": True, "multiplier": 0.5}
+    after, detail = apply(data, config)
+    assert after.at[5, "Value"] == 15
+    assert after.at[6, "Value"] == 200
+    assert after.at[7, "Value"] is None
+    assert detail["affected_rows"] == 1
+    with pytest.raises(ValueError):
+        apply(data, {**config, "value": "bad"})
+
+
+def test_cap_resolves_exact_reviewed_value_and_changed_value_is_rechecked():
+    data = record([10, 11, 12, 13, 14, 100, None])
+    settings = {"column": "Value", "action": "cap", "confirmed": True}
+    expected = review(data, settings)["findings"][0]["after"]
+    after, _ = apply(data, settings)
+    assert after.at[5, "Value"] == expected
+    data["editor_df"] = after
+    assert review(data, settings)["count"] == 0
+    # Subsequent changes to other values can tighten bounds around the reviewed cap.
+    data["editor_df"].loc[0:4, "Value"] = [1, 2, 3, 4, 5]
+    assert review(data, settings)["count"] == 0
+    data["editor_df"].at[5, "Value"] = 999
+    assert review(data, settings)["all_row_indices"] == [5]
+
+
+def test_distribution_counts_all_values_and_marks_only_current_findings():
+    data = record([10, 11, 12, 13, 14, 100, None])
+    result = review(data, {"column": "Value"})
+    chart = result["distributions"][0]
+    assert chart["median"] == 12.5
+    assert chart["count"] == 6
+    assert sum(bin["count"] for bin in chart["bins"]) == 6
+    assert sum(bin["flagged"] for bin in chart["bins"]) == result["count"] == 1
+    assert chart["points"] == [{"row": 7, "value": 100}]
+    apply(data, {"column": "Value", "action": "keep"})
+    chart = review(data, {"column": "Value"})["distributions"][0]
+    assert chart["flagged_count"] == 0
+    assert sum(bin["count"] for bin in chart["bins"]) == 6
+
+
+def test_distribution_keeps_group_statistics_separate():
+    data = record([1, 2, 3, 4, 100, 1000, 1001, 1002, 1003, 1004], ["A"] * 5 + ["B"] * 5)
+    charts = review(data, {"column": "Value", "group_by": ["Group"]})["distributions"]
+    assert [chart["median"] for chart in charts] == [3, 1002]
+    assert [chart["count"] for chart in charts] == [5, 5]

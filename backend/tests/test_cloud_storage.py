@@ -112,4 +112,3 @@ def test_exported_routes_and_missing_api(tmp_path, monkeypatch):
     assert client.get("/workspace").text == "workspace"
     assert client.get("/api/missing").status_code == 404
     assert client.get("/missing.js").status_code == 404
-

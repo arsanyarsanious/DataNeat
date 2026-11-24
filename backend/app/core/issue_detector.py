@@ -140,6 +140,24 @@ def detect_percentage_inconsistency(series):
     }
 
 
+def detect_percentage_scale(series, declared_scale=""):
+    analysis = analyze_percentage_column(series)
+    if not analysis["bare_count"] or declared_scale in ("points", "ratio"):
+        return issue(series, "percentage_scale", [])
+    return {
+        "issue": "percentage_scale",
+        "column": str(series.name),
+        "count": analysis["bare_count"],
+        "examples": analysis["bare_examples"],
+        "explanation": (
+            "Numbers without a % sign in a percentage column have no declared scale. "
+            "Choose whether bare numbers mean percentage points (0.96 = 0.96%) or "
+            "fractional ratios (0.96 = 96%) in Column settings. Values are not changed "
+            "until you normalize the notation."
+        ),
+    }
+
+
 def detect_phone_issues(series):
     analysis = analyze_phone_column(series)
     result = []
@@ -194,13 +212,25 @@ def detect_column_issues(series, detected_type):
             *semantic_findings(series, kind),
             detect_type_mismatches(series, detected_type),
             *([issue(series, "invalid_email", [value for value in series if not missing(value) and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", str(value))])] if kind == "email" or (not ACTIVE_SETTINGS.get().get(str(series.name), {}).get("type") and re.search(r"email", str(series.name), re.I)) else []),
-            *([detect_odd_values(series)] if kind not in SEMANTIC_TYPES | {"identifier", "phone", "boolean", "duration", "time"} else []),
+            *([detect_odd_values(series, kind)] if kind not in SEMANTIC_TYPES | {"identifier", "phone", "boolean", "duration", "time"} else []),
             *([detect_date_format_inconsistency(series)] if kind in ("date", "datetime") else []),
             *([detect_boolean_inconsistency(series)] if kind == "boolean" else []),
             *(detect_phone_issues(series) if kind == "phone" else []),
             *(
                 [detect_symbol_inconsistency(series)]
                 if kind == "number_with_symbol"
+                else []
+            ),
+            *(
+                [
+                    detect_percentage_scale(
+                        series,
+                        ACTIVE_SETTINGS.get().get(str(series.name), {}).get(
+                            "percentage_scale", ""
+                        ),
+                    )
+                ]
+                if kind == "percentage"
                 else []
             ),
             *(
@@ -239,7 +269,13 @@ def value_family(value):
     return "text"
 
 
-def detect_odd_values(series):
+def detect_odd_values(series, kind=None):
+    if kind == "percentage":
+        odd = [(i, v) for i, v in series.items() if not missing(v) and not is_percentage_number(v)]
+        return issue(series, "odd_value", [v for _, v in odd], row_indices=[int(i) for i, _ in odd], expected_type=kind)
+    if kind in ('date', 'datetime'):
+        odd = [(i, v) for i, v in series.items() if not missing(v) and not detect_date_pattern(v)]
+        return issue(series, 'odd_value', [v for _, v in odd], row_indices=[int(i) for i, _ in odd], expected_type='date')
     observed = [(index, value, value_family(value)) for index, value in series.items() if not missing(value)]
     counts = Counter(family for _, _, family in observed)
     if len(observed) < 3 or not counts:

@@ -14,6 +14,7 @@ const names: Record<string, string> = {
   ambiguous_dates: "Dates with two possible meanings",
   currency_inconsistency: "Mixed currency notation",
   percentage_inconsistency: "Mixed percentage notation",
+  percentage_scale: "Bare percentage values with no declared scale",
   phone_inconsistency: "Mixed country codes and + notation",
   invalid_phone: "Unrecognized phone numbers",
   symbol_inconsistency: "Mixed numeric symbols or labels",
@@ -107,6 +108,14 @@ export function ColumnAnalysis({
               <p>
                 These dates could mean day/month or month/day. They stay
                 unchanged until you confirm an interpretation.
+              </p>
+            )}
+            {issue.issue === "percentage_scale" && (
+              <p>
+                These numbers have no % sign, so their scale is not declared.
+                0.96 could mean 96% (ratio) or 0.96% (percentage points). Choose
+                the scale in Column settings; no scale is inferred from the
+                value range and no values are rewritten.
               </p>
             )}
             {(issue.issue === "phone_inconsistency" ||

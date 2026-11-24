@@ -596,3 +596,12 @@ def test_currency_uniform_symbols_and_grouping():
     ]
     assert normalize_currency(values, {"action": "preserve"}).equals(values)
     assert analyze_currency_column(pd.Series(["$1,234", "$1234"]))["inconsistent"]
+
+def test_date_column_keeps_odd_text_out_of_bulk_invalid_date_fix():
+    from app.core.cleaner import resolve_invalid_dates
+    values = pd.Series(["2025-01-01"] * 10 + ["pending", "2025-13-01", "2025-02-30", "05/10/2025", None], name="Dispatch_Date")
+    report = profile_column(values)
+    issues = {item["issue"]: item for item in report["issues"]}
+    assert issues["odd_value"]["examples"] == ["pending"]
+    assert issues["invalid_dates"]["examples"] == ["2025-13-01", "2025-02-30"]
+    assert resolve_invalid_dates(values, {"action": "empty"}).tolist()[10:] == ["pending", None, None, "05/10/2025", None]

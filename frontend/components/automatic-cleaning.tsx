@@ -11,9 +11,8 @@ const questions:{key:PolicyKey;title:string;options:[string,string][];types?:str
  {key:"trim",title:"Trim extra whitespace",options:[["true","Trim extra whitespace"],["false","Keep whitespace unchanged"]]},
  {key:"boolean",title:"How should boolean answers look?",types:["boolean"],options:[["preserve","Keep existing labels"],["true_false","true / false"],["yes_no","Yes / No"],["one_zero","1 / 0"]]},
  {key:"capitalization",title:"How should text capitalization look?",types:["text","category","categorical"],options:[["preserve","Keep existing capitalization"],["title","Title"],["upper","UPPER"],["lower","lower"]]},
- {key:"dates",title:"How should dates be interpreted?",types:["date","datetime"],options:[["preserve","Keep dates unchanged"],["unambiguous","Standardize only unambiguous dates"],["day_first","Day first (DD/MM/YYYY)"],["month_first","Month first (MM/DD/YYYY)"]]},
+ {key:"dates",title:"How should dates be interpreted?",types:["date","datetime"],options:[["preserve","Keep dates unchanged"],["unambiguous","Standardize only unambiguous dates (keep ambiguous)"],["day_first","Day first (DD/MM/YYYY) — resolve ambiguous dates"],["month_first","Month first (MM/DD/YYYY) — resolve ambiguous dates"]]},
  {key:"date_output",title:"How should standardized dates look?",types:["date","datetime"],options:DATE_FORMAT_OPTIONS},
- {key:"missing",title:"How should missing numeric measurements be handled?",types:["integer","decimal","numeric","float"],options:[["preserve","Leave empty"],["median","Estimate using the column median"],["mean","Estimate using the column mean"]]}
 ];
 type Result={changed_cells:number;removed_rows?:number;operations:unknown[];skipped:string[];remaining?:{cells?:number};run_id?:string};
 export function AutomaticCleaning({fileId,revision,profile,onClose,onApplied,onReview,onDownload}:{fileId:string;revision:number;profile:Profile;onClose:()=>void;onApplied:()=>Promise<void>;onReview:()=>void;onDownload:()=>Promise<void>}){
@@ -44,14 +43,28 @@ export function AutomaticCleaning({fileId,revision,profile,onClose,onApplied,onR
  }catch{setError("Saved choices could not be read. You can choose new answers.");}}
  function example(key:PolicyKey,chosen:string,columnName?:string){
   const q=questions.find(q=>q.key===key)!;
-  const column=columnName?profile.columns.find(c=>c.column_name===columnName):profile.columns.find(c=>c.detected_type!=="identifier"&&(!q.types||q.types.includes(c.detected_type)));
+  const matches=(column:Profile["columns"][number])=>column.detected_type!=="identifier"&&(!q.types||q.types.includes(column.detected_type)||q.types.includes(String(column.intent?.type||"")));
+  const column=columnName?profile.columns.find(c=>c.column_name===columnName):profile.columns.find(matches);
   if(!column)return "No applicable columns in this file.";
-  const raw=(key==="trim"?column.sample_values.find(v=>typeof v==="string"&&v.trim().replace(/\s+/g," ")!==v):undefined)??column.sample_values.find(v=>v!==null&&v!==undefined);const before=String(raw??"empty");let after=before;
+  const looksAmbiguous=(value:unknown)=>{if(typeof value!=="string")return false;const text=value.trim();if(!/^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}$/.test(text))return false;const [a,b]=text.split(/[-/]/).map(Number);return a<=12&&b<=12;};
+  const preferred=key==="dates"&&chosen!=="preserve"?column.sample_values.find(looksAmbiguous):undefined;
+  const raw=(key==="trim"?column.sample_values.find(v=>typeof v==="string"&&v.trim().replace(/\s+/g," ")!==v):undefined)??preferred??column.sample_values.find(v=>v!==null&&v!==undefined);const before=String(raw??"empty");let after=before;
   if(key==="trim"&&chosen==="true")after=before.trim().replace(/\s+/g," ");
   if(key==="capitalization"&&chosen!=="preserve")after=chosen==="lower"?before.toLowerCase():chosen==="upper"?before.toUpperCase():before.toLowerCase().replace(/\b\p{L}/gu,c=>c.toUpperCase());
   if(key==="boolean"&&chosen!=="preserve"){const normalized=before.trim().toLowerCase();if(!["true","yes","y","1","false","no","n","0"].includes(normalized))return `${column.column_name}: “${before}” stays unchanged (not a recognized boolean label).`;const truth=["true","yes","y","1"].includes(normalized);after=chosen==="yes_no"?(truth?"Yes":"No"):chosen==="one_zero"?(truth?"1":"0"):String(truth);}
   if(key==="date_output")return `Output: ${chosen}. Used when date standardization is enabled; this does not choose the input day/month order.`;
-  if(key==="dates"&&chosen!=="preserve")return `${column.column_name}: ${before} → ${answers.exceptions[column.column_name]?.date_output||answers.date_output}; ${chosen==="unambiguous"?"ambiguous dates stay unchanged":chosen.replace("_"," ")}.`;
+  if(key==="dates"&&chosen!=="preserve"){
+    const output=answers.exceptions[column.column_name]?.date_output||answers.date_output;
+    const label=chosen==="day_first"?"day first":"month first";
+    if(chosen==="unambiguous")return `${column.column_name}: ${before} → ${output}; ambiguous values stay unchanged until you choose day first or month first.`;
+    const parts=before.trim().split(/[-/]/).map(Number);
+    if(parts.length===3&&parts.every(value=>Number.isFinite(value))&&parts[2]>31){
+      const [a,b,y]=parts;const day=chosen==="day_first"?a:b;const month=chosen==="day_first"?b:a;
+      const resolved=`${String(y).padStart(4,"0")}-${String(month).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+      return `${column.column_name}: ${before} → ${output==="YYYY-MM-DD"?resolved:`${output} (${resolved})`} · ${label}; ambiguous dates are resolved.`;
+    }
+    return `${column.column_name}: ${before} → ${output} · ${label}; ambiguous dates are resolved where they can be parsed.`;
+  }
   if(key==="missing")return chosen==="preserve"?`${column.column_name}: empty → empty`:`${column.column_name}: empty → column ${chosen} (estimate, calculated from all eligible rows)`;
   return `${column.column_name}: “${before}” → “${after}”`;
  }
@@ -72,7 +85,7 @@ export function AutomaticCleaning({fileId,revision,profile,onClose,onApplied,onR
  {savedAvailable&&<div className="auto-result-actions"><Button variant="outline" disabled={busy} onClick={restoreChoices}>Load saved choices</Button><Button variant="ghost" disabled={busy} onClick={()=>{try{localStorage.removeItem("dataneat-automatic-choices-v1");setSavedAvailable(false);setRestoreNotice("Saved choices removed from this browser. Current answers stay unchanged.");}catch{setError("This browser could not remove saved choices.");}}}>Forget saved choices</Button></div>}{restoreNotice&&<p role="status">{restoreNotice}</p>}
  <fieldset disabled={busy} className="auto-cleaning-questions">
  {questions.map(question=>{
-  const candidates=profile.columns.filter(column=>column.detected_type!=="identifier"&&(!question.types||question.types.includes(column.detected_type)));
+  const candidates=profile.columns.filter(column=>column.detected_type!=="identifier"&&(!question.types||question.types.includes(column.detected_type)||question.types.includes(String(column.intent?.type||""))));
   const selected=Object.entries(answers.exceptions).filter(([,values])=>values[question.key]!==undefined);
   const available=candidates.filter(column=>answers.exceptions[column.column_name]?.[question.key]===undefined);
   return <section className="auto-cleaning-question" key={question.key}>
@@ -96,7 +109,7 @@ export function AutomaticCleaning({fileId,revision,profile,onClose,onApplied,onR
  <section className="auto-cleaning-question"><label>How should duplicate rows be handled?<select aria-label="Duplicate rows" value={answers.duplicates} onChange={e=>setAnswers(a=>({...a,duplicates:e.target.value as Answers["duplicates"]}))}><option value="preserve">Keep duplicate rows</option><option value="remove">Remove duplicate rows — keep the first occurrence</option></select></label><small className="auto-example">{profile.duplicate_rows.toLocaleString()} full duplicate rows currently detected. Removal runs after your selected cleaning, compares every column, and can be undone. Rows sharing only some values are kept.</small></section>
  <label><input type="checkbox" checked={saveChoices} onChange={e=>setSaveChoices(e.target.checked)}/> Use these choices next time (saved in this browser after a successful run)</label>
  </fieldset>
- <p className="muted">Identifiers and columns with your manual corrections are preserved. Invalid values, ambiguous units, missing non-numeric values remain for manual cleaning. Duplicate rows are removed only if you choose that option. No currency conversion is performed.</p>
+ <p className="muted">Identifiers and columns with your manual corrections are preserved. Invalid values, ambiguous units, missing values are reviewed in the Imputation phase. Duplicate rows are removed only if you choose that option. No currency conversion is performed.</p>
  {error&&<p role="alert">{error}</p>}
  {busy?<div><p role="status">{job?.stage || "Analyzing and cleaning…"}</p><progress aria-label="Automatic cleaning progress" />{job&&<Button variant="outline" onClick={async()=>{try{await api(`/workflow-jobs/${job.id}/cancel`,{method:"POST"});}catch(e){setError((e as Error).message);}}}>Cancel cleaning</Button>}</div>:<Button onClick={start}>Start automatic cleaning</Button>}
  </>}

@@ -10,7 +10,7 @@ from .duration import is_duration, format_duration
 from .cleaner import apply_cleaning_plan
 from .common import missing, scalar
 from .currency import parse_currency
-from .date_analyzer import is_ambiguous_numeric_date, is_valid_date
+from .date_analyzer import is_ambiguous_numeric_date, is_valid_date, is_invalid_calendar_date
 from .imputation import impute_missing_values
 from .percentage import is_percentage_number, parse_percentage
 from .phone import international_phone
@@ -152,7 +152,7 @@ def annotate(df, report, part, columns=None):
                         "whitespace",
                         "This value has extra whitespace. Trim edges and repeated spaces.",
                     )
-                if "invalid_dates" in kinds and not is_valid_date(value):
+                if "invalid_dates" in kinds and is_invalid_calendar_date(value):
                     add(
                         "invalid_date",
                         "This is not a valid calendar date. Correct it manually or clear it.",
@@ -186,6 +186,16 @@ def annotate(df, report, part, columns=None):
                             )
                         except ValueError:
                             pass
+                if c["detected_type"] == "percentage" and not c.get("intent", {}).get("percentage_scale"):
+                    try:
+                        _, marked = parse_percentage(value)
+                    except ValueError:
+                        marked = True
+                    if marked is False:
+                        add(
+                            "percentage_scale",
+                            "Bare percentage value. Choose whether bare numbers in this column mean percentage points or fractional ratios.",
+                        )
                 if c["detected_type"] == "phone":
                     if "phone_inconsistency" in kinds:
                         add(
@@ -267,13 +277,13 @@ def propose(df, body, cached_report=None):
                 raise ValueError("The selected cell does not have this issue anymore")
             result.loc[affected, column] = body.value
         elif body.scope == "invalid_dates":
-            if is_valid_date(df.loc[body.row_index, column]) or missing(df.loc[body.row_index, column]):
+            if not is_invalid_calendar_date(df.loc[body.row_index, column]):
                 raise ValueError("Select an invalid date cell before applying this scope")
             report = cached_report or profile_dataframe(df)
             kind = next(c["detected_type"] for c in report["columns"] if c["column_name"] == column)
             if kind not in ("date", "datetime"):
                 raise ValueError("This scope requires a detected date column")
-            mask = df[column].map(lambda value: not missing(value) and not is_valid_date(value))
+            mask = df[column].map(lambda value: not missing(value) and is_invalid_calendar_date(value))
             result.loc[mask, column] = body.value
         elif body.scope == "matching":
             selected = scalar(df.loc[body.row_index, column])
@@ -298,7 +308,7 @@ def propose(df, body, cached_report=None):
             config = next((c for c in (cached_report or {}).get("columns", []) if c["column_name"] == column), {})
             if config.get("detected_type"):
                 params["_column_kind"] = config["detected_type"]
-            if config.get("intent", {}).get("type") and params.get("method") in ("mean", "median", "group_mean", "group_median", "linear_interpolation") and config["detected_type"] not in ("integer", "decimal", "date", "datetime"):
+            if config.get("intent", {}).get("type") and params.get("method") in ("mean", "median", "group_mean", "group_median", "linear_interpolation") and config["detected_type"] not in ("integer", "decimal", "date", "datetime", "percentage"):
                 raise ValueError("This imputation method does not match your selected column data type.")
             if body.scope == "cell": params["_target_rows"] = [body.row_index]
             result, detail = impute_missing_values(

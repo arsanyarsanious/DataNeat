@@ -1,0 +1,10 @@
+# Optional automatic cleaning
+An **Automatic cleaning** button is visible in the workbook toolbar during manual interactive cleaning. It opens the existing survey on the current working copy and revision, preserving previous manual steps. Opening or closing the survey does not apply changes. Pending missing-label review is still shown first when needed, with an explicit option to continue while unresolved columns remain unchanged.
+
+Uploads open directly in the interactive sheet. Automatic cleaning opens an optional survey, not an upload preparation stage. Submitting authorizes a backend analysis of the current working copy and direct application of selected whitespace, boolean, capitalization, date and numeric missing-value policies. No preview/review roundtrip is required.
+
+Unanswered choices preserve data. Identifiers and columns containing accepted manual corrections are preserved. Row deletion requires the explicit duplicate-removal choice. No currency conversion, ambiguous unit inference or filling of non-numeric fields occurs. Skipped columns are reported. Each applied action uses the existing audited, undoable decision engine. Jobs use revision checks, isolated copies, cancellation and atomic commit; a failed job preserves the last committed revision. Refresh recovery uses the existing workflow job controls.
+
+Each question offers Add exception. Select an applicable column and its alternative policy (including preserve). Per-column exceptions override only that question; other answers are inherited. Multiple exceptions and removing exceptions are supported. Unknown column names and invalid policies are rejected. Protected identifiers and previously accepted manual corrections remain protected.
+
+Duplicate rows: the optional survey choice defaults to keeping rows. Remove compares all columns after selected cleaning, keeps the first occurrence and records an undoable remove_duplicates step in the run/recipe. Result summaries report removed rows separately from cell changes. Column exceptions do not apply to this dataset-wide choice.

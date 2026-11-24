@@ -109,11 +109,15 @@ def is_valid_date(value):
         return False
 
 
+def is_invalid_calendar_date(value):
+    return bool(detect_date_pattern(value)) and not is_valid_date(value)
+
+
 def analyze_date_column(series):
     values = [v for v in series if not missing(v)]
     patterns = Counter(detect_date_pattern(v) or "unrecognized" for v in values)
     ambiguous = [str(v) for v in values if is_ambiguous_numeric_date(v)]
-    invalid = [str(v) for v in values if not is_valid_date(v)]
+    invalid = [str(v) for v in values if is_invalid_calendar_date(v)]
     dd = sum(
         bool((p := infer_numeric_date_format(v)) and p.startswith("DD")) for v in values
     )

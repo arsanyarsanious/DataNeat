@@ -47,7 +47,8 @@ def test_old_schema_cannot_reuse_a_clean_annotation_cache():
     rec["analysis_schema_version"] = 6
     rec["workflow_annotations"] = {"Key": {}, "Amount": {1: [{"kind": "missing"}]}}
     assert not column_readiness(rec, "Amount")["ready"]
-    assert rec["analysis_schema_version"] == 8
+    from app.core.imputation_readiness import ANALYSIS_SCHEMA_VERSION
+    assert rec["analysis_schema_version"] == ANALYSIS_SCHEMA_VERSION
 
 
 @pytest.mark.parametrize("method", ["mean", "median", "mode", "constant", "forward_fill", "backward_fill",
@@ -260,3 +261,21 @@ def test_plan_and_undo_apply_readiness_against_current_intermediate_sheet(client
     blocked = job(client, fid, revision=current["revision"], operation="undo", step_id=current["changes"][0]["id"])
     assert blocked["status"] == "failed" and "Cannot undo safely" in blocked["error"], blocked
     assert client.get(f"/api/files/{fid}/editor").json()["preview"]["rows"] == current["preview"]["rows"]
+
+
+def test_explicit_risk_acceptance_allows_current_data_imputation():
+    rec = record([10, None, 30])
+    rec["workflow_annotations"]["Amount"] = {
+        0: [{"kind": "outlier"}], 1: [{"kind": "missing"}]
+    }
+    apply_decision(rec, fix(rec, method="mean", confirmed=True,
+                           inconsistencies_acknowledged=True))
+    assert rec["editor_df"].at[1, "Amount"] == 20
+
+
+def test_acceptance_allows_constant_with_unresolved_text():
+    rec = record()
+    apply_decision(rec, fix(rec, method="constant", value=9, confirmed=True,
+                           inconsistencies_acknowledged=True))
+    assert rec["editor_df"].at[1, "Amount"] == 9
+    assert rec["editor_df"].at[2, "Amount"] == "bad"

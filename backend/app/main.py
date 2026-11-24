@@ -3,6 +3,7 @@ import hashlib
 import logging
 import io
 import os
+import threading
 import time
 import uuid
 from collections import defaultdict, deque
@@ -11,7 +12,7 @@ from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import BackgroundTasks, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from starlette.concurrency import run_in_threadpool
@@ -40,6 +41,36 @@ else:
 executor = ThreadPoolExecutor(max_workers=int(os.getenv("CLEANING_WORKERS", "2")))
 editor_tasks = {}
 MAX_UPLOAD = int(os.getenv("MAX_UPLOAD_MB", "20")) * 1024 * 1024
+
+# Starlette 1.x caps each multipart part at 1 MiB, which silently rejected
+# files between 1 MiB and our own upload limit. FastAPI parses File(...) forms
+# through Request.form(), so widen that default to the real upload budget.
+from starlette import requests as _starlette_requests  # noqa: E402
+
+_original_form = _starlette_requests.Request.form
+
+
+def _form_with_upload_limit(self, *, max_files=1000, max_fields=1000, max_part_size=None):
+    return _original_form(
+        self,
+        max_files=max_files,
+        max_fields=max_fields,
+        max_part_size=max_part_size or (MAX_UPLOAD + 1024 * 1024),
+    )
+
+
+_starlette_requests.Request.form = _form_with_upload_limit
+# 0 disables the guard. The public beta sets a budget so one oversized file
+# cannot make the single web worker unusable for everyone else.
+MAX_WORKFLOW_CELLS = max(0, int(os.getenv("MAX_WORKFLOW_CELLS", "0") or "0"))
+# 0 disables the guard. The public beta keeps a byte budget so one account
+# cannot fill the host disk with saved snapshots.
+MAX_STORAGE_MB = max(0, int(os.getenv("MAX_STORAGE_MB", "0") or "0"))
+# The hosted worker has a hard 60-second request ceiling. Larger files are
+# accepted immediately and profiled off-request; the client polls for readiness.
+ANALYSIS_SYNC_CELLS = max(0, int(os.getenv("ANALYSIS_SYNC_CELLS", "40000") or "0"))
+analysis_lock = threading.Lock()
+analysis_running: set[str] = set()
 rate = defaultdict(deque)
 ALLOWED_ORIGINS = [value.rstrip("/") for value in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",") if value]
 if os.getenv("RENDER_EXTERNAL_URL"):
@@ -99,7 +130,7 @@ async def session_and_limits(request: Request, call_next):
     request.state.session = session
     request.state.user = None
     path = request.url.path
-    public_paths = {"/api/health", "/api/auth/config", "/api/auth/session", "/api/auth/logout"}
+    public_paths = {"/api/health", "/api/auth/config", "/api/auth/session", "/api/auth/logout", "/api/diagnostics/tail", "/api/diagnostics/benchmark", "/api/diagnostics/background", "/api/diagnostics/background-status"}
     key = request.client.host if request.client else "local"
     now = time.monotonic()
     queue = rate[key]
@@ -113,7 +144,11 @@ async def session_and_limits(request: Request, call_next):
     length = request.headers.get("content-length")
     if length and (not length.isdigit() or int(length) > MAX_UPLOAD + 1024 * 1024):
         return JSONResponse({"detail": "Upload limit exceeded"}, status_code=413)
-    if identity.configuration()["enabled"] and path not in public_paths:
+    if (
+        identity.configuration()["enabled"]
+        and path not in public_paths
+        and not path.startswith("/api/share/")
+    ):
         try:
             user = await run_in_threadpool(identity.verify, request.cookies.get("dataneat_auth"))
         except HTTPException as exc:
@@ -162,11 +197,104 @@ async def invalid(request, exc):
     return JSONResponse({"detail": str(exc)}, status_code=422)
 
 
+@app.exception_handler(Exception)
+async def unexpected(request, exc):
+    logging.getLogger(__name__).exception("Unhandled API error on %s", request.url.path)
+    return JSONResponse(
+        {"detail": "The server could not complete this request. Please retry; your file and history are preserved."},
+        status_code=500,
+    )
+
+
 @app.get("/api/health")
 def health():
     from .core.file_parser import MAX_ROWS, MAX_COLUMNS
-    return {"status": "ok", "max_upload_mb": MAX_UPLOAD // (1024 * 1024),
-            "max_rows": MAX_ROWS, "max_columns": MAX_COLUMNS}
+    payload = {"status": "ok", "max_upload_mb": MAX_UPLOAD // (1024 * 1024),
+               "max_rows": MAX_ROWS, "max_columns": MAX_COLUMNS}
+    try:
+        import shutil
+        usage = shutil.disk_usage("/")
+        payload["disk_total_mb"] = usage.total // (1024 * 1024)
+        payload["disk_free_mb"] = usage.free // (1024 * 1024)
+        payload["storage_mb"] = round(
+            sum(path.stat().st_size for path in store.root.glob("*.bin")) / (1024 * 1024), 1
+        )
+    except Exception:
+        pass
+    return payload
+
+
+@app.get("/api/diagnostics/benchmark")
+def diagnostics_benchmark(request: Request, rows: int = 5000, cols: int = 10):
+    token = os.getenv("DIAG_TOKEN", "")
+    if not token or request.headers.get("x-diag-token") != token:
+        raise HTTPException(404)
+    import time as _time
+    import numpy as np
+    import pandas as pd
+    rows = max(10, min(rows, 15000))
+    cols = max(1, min(cols, 75))
+    rng = np.random.default_rng(7)
+    data = {}
+    for index in range(cols):
+        kind = index % 5
+        if kind == 0:
+            data[f"Name {index}"] = ["Cairo", "cairo", "Alexandria", "Giza"] * (rows // 4) + ["Cairo"] * (rows % 4)
+        elif kind == 1:
+            data[f"Amount {index}"] = rng.integers(1, 100000, rows)
+        elif kind == 2:
+            data[f"Rate {index}"] = [f"{v:.0%}" if i % 3 else f"{v:.4f}" for i, v in enumerate(rng.random(rows))]
+        elif kind == 3:
+            data[f"Date {index}"] = ["15/05/1995", "03/07/2000", "2024-01-01", "N/A"] * (rows // 4) + ["15/05/1995"] * (rows % 4)
+        else:
+            data[f"Flag {index}"] = rng.choice(["Yes", "No", "TRUE", "1"], rows)
+    df = pd.DataFrame(data)
+    timings = {"rows": rows, "cols": cols, "cells": rows * cols}
+    started = _time.perf_counter()
+    report = profile_dataframe(df)
+    timings["profile_s"] = round(_time.perf_counter() - started, 2)
+    started = _time.perf_counter()
+    generate_cleaning_plan(df, report)
+    timings["plan_s"] = round(_time.perf_counter() - started, 2)
+    return timings
+
+
+@app.get("/api/diagnostics/background")
+def diagnostics_background(request: Request, background: BackgroundTasks):
+    token = os.getenv("DIAG_TOKEN", "")
+    if not token or request.headers.get("x-diag-token") != token:
+        raise HTTPException(404)
+    marker = Path("/home/ARSANY/dataneat-bg-marker.txt")
+
+    def work():
+        time.sleep(3)
+        marker.write_text(str(time.time()), encoding="utf-8")
+
+    background.add_task(work)
+    return {"scheduled": True}
+
+
+@app.get("/api/diagnostics/background-status")
+def diagnostics_background_status(request: Request):
+    token = os.getenv("DIAG_TOKEN", "")
+    if not token or request.headers.get("x-diag-token") != token:
+        raise HTTPException(404)
+    marker = Path("/home/ARSANY/dataneat-bg-marker.txt")
+    return {"finished": marker.exists(), "marker": marker.read_text(encoding="utf-8") if marker.exists() else None}
+
+
+@app.get("/api/diagnostics/tail")
+def diagnostics_tail(request: Request, lines: int = 200):
+    token = os.getenv("DIAG_TOKEN", "")
+    if not token or request.headers.get("x-diag-token") != token:
+        raise HTTPException(404)
+    path = os.getenv("ERROR_LOG", "/var/log/arsany.pythonanywhere.com.error.log")
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
+    except Exception as exc:
+        return {"error": type(exc).__name__, "path": path}
+    keep = max(1, min(lines, 500))
+    return {"path": path, "lines": text[-keep:]}
 
 
 @app.get("/api/auth/config")
@@ -290,9 +418,47 @@ async def inspect_uploaded_workbook(request: Request, file: UploadFile = File(..
         raise HTTPException(422, "Unable to inspect workbook; check its format and contents")
 
 
+def analyze_file(file_id: str, session: str):
+    """Profile and plan a stored upload outside the request/response cycle.
+
+    Safe to schedule more than once: the in-process set prevents duplicate work
+    after a client poll races the original background task.
+    """
+    with analysis_lock:
+        if file_id in analysis_running:
+            return
+        analysis_running.add(file_id)
+    try:
+        record = store.get(file_id, session)
+        if record.get("profile"):
+            return
+        record["profile"] = profile_dataframe(record["df"])
+        record["plan"] = generate_cleaning_plan(record["df"], record["profile"])
+        record.pop("analysis_error", None)
+        store.save(record)
+    except Exception as exc:
+        logging.getLogger(__name__).exception("Upload analysis failed for %s", file_id)
+        try:
+            record = store.get(file_id, session)
+            record["analysis_error"] = (
+                "The data summary could not be completed. Please retry the upload; "
+                "your original file has not been changed."
+            )
+            record["analysis_error_detail"] = str(exc)[:300]
+            store.save(record)
+        except Exception:
+            logging.getLogger(__name__).exception("Could not persist analysis error for %s", file_id)
+    finally:
+        with analysis_lock:
+            analysis_running.discard(file_id)
+
+
 @app.post("/api/files/upload")
 async def upload(
-    request: Request, file: UploadFile = File(...), sheet: str | None = Form(None)
+    request: Request,
+    background: BackgroundTasks,
+    file: UploadFile = File(...),
+    sheet: str | None = Form(None),
 ):
     if len(list(store.root.glob("*.bin"))) >= int(os.getenv("MAX_STORED_FILES", "1000")):
         raise HTTPException(
@@ -307,6 +473,14 @@ async def upload(
     if not data:
         raise HTTPException(422, "The file is empty")
     filename = Path((file.filename or "upload").replace("\\", "/")).name
+    if MAX_STORAGE_MB:
+        used = sum(path.stat().st_size for path in store.root.glob("*.bin"))
+        if used + len(data) > MAX_STORAGE_MB * 1024 * 1024:
+            raise HTTPException(
+                507,
+                "Beta storage is full. Delete files you no longer need, or run "
+                "DataNeat locally for more space.",
+            )
     try:
         df, metadata = await run_in_threadpool(parse_file, bytes(data), filename, sheet)
     except ValueError:
@@ -315,7 +489,14 @@ async def upload(
         raise HTTPException(
             422, "Unable to read spreadsheet; check its format and contents"
         )
-    report = await run_in_threadpool(profile_dataframe, df)
+    cells = len(df) * max(1, len(df.columns))
+    if MAX_WORKFLOW_CELLS and cells > MAX_WORKFLOW_CELLS:
+        raise HTTPException(
+            413,
+            f"This file has {cells:,} cells, above the beta analysis budget of "
+            f"{MAX_WORKFLOW_CELLS:,}. Run DataNeat locally for larger files.",
+        )
+    pending = cells > ANALYSIS_SYNC_CELLS
     record = {
         "id": str(uuid.uuid4()),
         "session": request.state.session,
@@ -325,25 +506,49 @@ async def upload(
         "original_bytes": bytes(data),
         "df": df,
         "metadata": metadata,
-        "profile": report,
-        "plan": generate_cleaning_plan(df, report),
     }
-    store.save(record)
+    if pending:
+        # The temporary working snapshot only needs to be local for the upload
+        # response. The analysis task performs the durable cloud commit.
+        store.save_local(record)
+        background.add_task(analyze_file, record["id"], request.state.session)
+    else:
+        record["profile"] = await run_in_threadpool(profile_dataframe, df)
+        record["plan"] = await run_in_threadpool(
+            generate_cleaning_plan, df, record["profile"]
+        )
+        store.save(record)
     return {
         "file_id": record["id"],
         "filename": filename,
         "metadata": metadata,
         "preview": preview(df),
-        "profile": report,
-        "plan": record["plan"],
+        "profile": record.get("profile"),
+        "plan": record.get("plan"),
+        "analysis_pending": pending,
         "storage": file_storage_status(record),
     }
+
+
+@app.get("/api/files/{file_id}/analysis")
+def analysis_progress(file_id: str, request: Request, background: BackgroundTasks):
+    record = file_record(file_id, request)
+    if record.get("profile"):
+        return {
+            "status": "ready",
+            "profile": record["profile"],
+            "plan": record.get("plan", []),
+        }
+    if record.get("analysis_error"):
+        raise HTTPException(422, record["analysis_error"])
+    background.add_task(analyze_file, file_id, record["session"])
+    return JSONResponse({"status": "pending"}, status_code=202)
 
 
 @app.get("/api/files/{file_id}/workspace")
 def restore_workspace(file_id: str, request: Request):
     record = file_record(file_id, request)
-    return {"file_id": file_id, "filename": record.get("saved_name") or record["filename"], "metadata": record["metadata"], "preview": preview(record["df"]), "profile": record["profile"], "plan": record["plan"], "storage": file_storage_status(record)}
+    return {"file_id": file_id, "filename": record.get("saved_name") or record["filename"], "metadata": record["metadata"], "preview": preview(record["df"]), "profile": record.get("profile"), "plan": record.get("plan"), "analysis_pending": not record.get("profile"), "storage": file_storage_status(record)}
 
 
 def file_storage_status(record):
@@ -1051,6 +1256,10 @@ def editor_download(
 # Enhanced workflows are owner-scoped and use the existing editor/export formats.
 from .services.workflow_jobs import install_workflows
 install_workflows(app, store, editor_response, safe_export)
+from .services.sharing import install_sharing
+install_sharing(app, store)
+from .services.ai_assist import install_assist
+install_assist(app, store)
 from .services.account_files import install_account_files
 install_account_files(app, store)
 from .services.static_site import install_static_site

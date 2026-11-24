@@ -457,6 +457,7 @@ def _impute_missing_values(df, column, method, parameters):
     amount_marker = None
     percentage_marked = False
     if kind == "percentage" and base in ("mean", "median"):
+        scale = parameters.get("_percentage_scale") or parameters.get("percentage_scale") or ""
         parsed_percentages = {}
         for index, value in original.loc[~source_mask].items():
             try:
@@ -464,12 +465,31 @@ def _impute_missing_values(df, column, method, parameters):
             except ValueError as exc:
                 raise ValueError(f"Column '{column}', spreadsheet row {int(index) + 2}, value {str(value)!r}: not a supported percentage.") from exc
         marked_states = {marked for _, marked in parsed_percentages.values()}
+        bare = [index for index, (_, marked) in parsed_percentages.items() if not marked]
+        if bare and scale not in ("points", "ratio"):
+            raise ValueError(
+                f"Column '{column}', spreadsheet row {int(bare[0]) + 2}: bare percentage values have no declared scale. "
+                "Choose whether bare numbers mean percentage points (0.96 = 0.96%) or fractional ratios "
+                "(0.96 = 96%) in Column settings before filling missing values."
+            )
         if len(marked_states) > 1:
-            index = next(index for index, (_, marked) in parsed_percentages.items() if not marked)
-            raise ValueError(f"Column '{column}', spreadsheet row {int(index) + 2}, value {str(original.loc[index])!r}: percentage signs and bare numbers are mixed. Normalize the percentage scale before mean/median; choose whether bare numbers are percentage points or fractions.")
+            index = bare[0]
+            raise ValueError(f"Column '{column}', spreadsheet row {int(index) + 2}, value {str(original.loc[index])!r}: percentage signs and bare numbers are mixed. Normalize the percentage notation before mean/median; the bare scale is {'points' if scale == 'points' else 'ratios'}.")
+
         percentage_marked = marked_states == {True}
-        calculation = original.where(~source_mask).map(lambda value: None if missing(value) else float(parse_percentage(value)[0]))
-        detail["warnings"].append("Percentage calculations preserve the existing scale and observed cells. Marked values use percentage points; no implicit multiplication or division by 100 is performed.")
+
+        def percentage_points(value):
+            if missing(value):
+                return None
+            number, marked = parse_percentage(value)
+            return float(number) if marked or scale == "points" else float(number) * 100
+
+        calculation = original.where(~source_mask).map(percentage_points)
+        detail["warnings"].append(
+            "Percentage calculations use percentage points. "
+            + ("Marked values are points; bare values are scaled up by 100 as declared ratios. " if scale == "ratio" else "Marked and bare values are treated as percentage points. ")
+            + "Observed cells are preserved."
+        )
     if kind == "currency" and base in ("mean", "median"):
         parsed = {}
         for index, value in original.loc[~source_mask].items():

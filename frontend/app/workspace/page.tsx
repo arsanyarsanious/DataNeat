@@ -28,6 +28,11 @@ import { WorkspaceSidebar } from "@/components/workspace-sidebar";
 import { DataNeatMark } from "@/components/dataneat-mark";
 import { AccountFileControls, type FileStorageStatus } from "@/components/account-file-controls";
 import { api, initializeSession, type Upload } from "@/lib/types";
+type UploadStart = Omit<Upload, "profile" | "plan"> & {
+  profile?: Upload["profile"];
+  plan?: Upload["plan"];
+  analysis_pending?: boolean;
+};
 type WorkbookInspection = {
   filename: string;
   sheets: {name:string;rows:number;columns:number;hidden:boolean;selectable:boolean;reason?:string}[];
@@ -35,7 +40,7 @@ type WorkbookInspection = {
   selected_sheet: string | null;
 };
 export default function Home() {
-  const [flowPhase,setFlowPhase]=useState<"choose"|"clean"|"results">("choose");
+  const [flowPhase,setFlowPhase]=useState<"choose"|"clean"|"impute"|"results">("choose");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [stage, setStage] = useState<
     "upload" | "editor"
@@ -49,6 +54,7 @@ export default function Home() {
   const [uploadLimit, setUploadLimit] = useState(20);
   const [tableLimits, setTableLimits] = useState({ rows: 100000, columns: 200 });
   const [inspecting, setInspecting] = useState(false);
+  const [analyzing, setAnalyzing] = useState(false);
   const [pendingWorkbook, setPendingWorkbook] = useState<{file:File;inspection:WorkbookInspection}|null>(null);
   const [selectedWorksheet, setSelectedWorksheet] = useState("");
   const sheetDialog = useRef<HTMLDialogElement>(null);
@@ -68,9 +74,16 @@ export default function Home() {
         if (!raw&&!requested) return;
         const saved = requested?{fileId:requested}:JSON.parse(raw!);
         if (typeof saved.fileId !== "string") return;
-        const data = await api<Upload>(`/files/${saved.fileId}/workspace`);
+        const data = await api<UploadStart>(`/files/${saved.fileId}/workspace`);
         if (!active) return;
-        setUploaded(data);
+        if (!data.profile || !data.plan) {
+          setAnalyzing(true);
+          const ready = await waitForAnalysis(data.file_id);
+          data.profile = ready.profile;
+          data.plan = ready.plan;
+          setAnalyzing(false);
+        }
+        setUploaded(data as Upload);
         setStorageStatus(data.storage||null);
         if (raw && (saved.interactive === false || saved.job)) sessionStorage.setItem("dataneat-legacy-workspace", raw);
         setStage("editor");
@@ -91,7 +104,7 @@ export default function Home() {
     void initializeSession()
       .then((data) => { setUploadLimit(data.max_upload_mb); setTableLimits({ rows: data.max_rows || 100000, columns: data.max_columns || 200 }); })
       .catch(() => {});
-    const value = localStorage.getItem("dataneat-theme") === "dark";
+    const value = localStorage.getItem("dataneat-theme") !== "light";
     setDark(value);
     document.documentElement.classList.toggle("dark", value);
   }, []);
@@ -125,6 +138,37 @@ export default function Home() {
     } catch(e) { setError((e as Error).message); }
     finally { setBusy(false);setInspecting(false); }
   }
+  async function waitForAnalysis(fileId: string): Promise<{ profile: Upload["profile"]; plan: Upload["plan"] }> {
+    const started = Date.now();
+    const deadline = started + 10 * 60 * 1000;
+    let networkFailures = 0;
+    while (Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, Date.now() - started < 8000 ? 500 : 1500));
+      let response: Response;
+      try {
+        response = await fetch(`/api/files/${fileId}/analysis`, { credentials: "same-origin", cache: "no-store" });
+      } catch {
+        networkFailures += 1;
+        if (networkFailures > 5) throw new Error("Unable to reach the server while preparing the data summary. Please retry.");
+        continue;
+      }
+      networkFailures = 0;
+      const result = (await response.json().catch(() => ({}))) as {
+        status?: string;
+        profile?: Upload["profile"];
+        plan?: Upload["plan"];
+        detail?: string;
+      };
+      if (response.status === 202) continue;
+      if (!response.ok) {
+        throw new Error(result.detail || `The data summary could not be prepared (HTTP ${response.status}). Please retry.`);
+      }
+      if (result.status === "ready" && result.profile && result.plan) {
+        return { profile: result.profile, plan: result.plan };
+      }
+    }
+    throw new Error("Preparing the data summary is taking longer than expected. Keep this tab open and retry in a moment.");
+  }
   async function upload(selected: File, sheet?: string, confirmed=false) {
     if (!validFile(selected)) return;
     if(uploaded&&!confirmed&&!window.dispatchEvent(new CustomEvent("dataneat-before-reset",{cancelable:true,detail:{proceed:()=>void upload(selected,sheet,true)}})))return;
@@ -136,7 +180,7 @@ export default function Home() {
     if (sheet) form.append("sheet", sheet);
     try {
       await initializeSession();
-      const response = await new Promise<Upload>((resolve, reject) => {
+      const response = await new Promise<UploadStart>((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.open("POST", "/api/files/upload");
         xhr.upload.onprogress = (e) => {
@@ -156,17 +200,35 @@ export default function Home() {
                 ),
               );
           } catch {
-            reject(new Error("Server returned an invalid response"));
+            reject(
+              new Error(
+                xhr.status
+                  ? `The server returned HTTP ${xhr.status}${xhr.statusText ? " (" + xhr.statusText + ")" : ""} instead of a result. Please retry.`
+                  : "Unable to reach the server. Please retry.",
+              ),
+            );
           }
         };
         xhr.onerror = () =>
           reject(new Error("Unable to reach the server. Please retry."));
         xhr.send(form);
       });
+      // Large files finish profiling off-request so a hosted proxy timeout can
+      // never turn a valid upload into an unreadable half-response.
+      let profile = response.profile;
+      let plan = response.plan;
+      if (!profile || !plan) {
+        setAnalyzing(true);
+        const ready = await waitForAnalysis(response.file_id);
+        profile = ready.profile;
+        plan = ready.plan;
+        setAnalyzing(false);
+      }
+      const result: Upload = { ...(response as unknown as Upload), profile, plan };
       // The successful new workspace must still open if an older temporary file has expired.
       if (uploaded)
         void api(`/files/${uploaded.file_id}?only_temporary=true`, { method: "DELETE" }).catch(()=>{});
-      setUploaded(response);
+      setUploaded(result);
       setStorageStatus(response.storage||null);setConfirmDelete(false);window.history.replaceState({},"","/workspace");
       setFile(selected);
       setFlowPhase("choose");
@@ -175,6 +237,7 @@ export default function Home() {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+      setAnalyzing(false);
     }
   }
   async function reset(confirmed=false,deleteFile=false) {
@@ -228,6 +291,7 @@ export default function Home() {
         </header>
         <main>
           {restoring && <CleaningProgress label="Restoring your workspace…" />}
+          {analyzing && <CleaningProgress label="Preparing your data summary…" />}
           {busy && uploaded && <CleaningProgress label={inspecting?"Reading worksheet names…":"Processing your spreadsheet…"} />}
           <div className="page-heading">
             <div>
@@ -236,7 +300,7 @@ export default function Home() {
                 LESS MESS. MORE POSSIBILITY.
               </div>
               <h1>
-                {stage === "upload" ? "Good data starts here." : flowPhase==="choose" ? "Explore your data." : flowPhase==="results" ? "Export your results." : "Your spreadsheet."}
+                {stage === "upload" ? "Good data starts here." : flowPhase==="choose" ? "Explore your data." : flowPhase==="impute" ? "Review missing values." : flowPhase==="results" ? "Export your results." : "Your spreadsheet."}
               </h1>
               <p>
                 {stage === "upload" ? "Turn messy spreadsheets into clean, consistent data — without the busywork." : ""}
