@@ -301,7 +301,7 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
     setLoadingIssueKinds(true);
     api<{ available_kinds: string[] }>(`/files/${fileId}/editor/next-issue?column=${encodeURIComponent(issueColumn)}&distinct_types=true`, { signal: controller.signal }).then(data => {
       if (controller.signal.aborted) return;
-      setColumnIssueKinds(data.available_kinds);
+      setColumnIssueKinds(data.available_kinds.filter(kind=>!isMissingIssue(kind)));
       setIssueKind(kind => kind === "any" || data.available_kinds.includes(kind) ? kind : "any");
     }).catch(e => { if (!controller.signal.aborted) setIssueKindsError((e as Error).message); }).finally(() => { if (!controller.signal.aborted) setLoadingIssueKinds(false); });
     return () => controller.abort();
@@ -472,7 +472,7 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
   }
   async function jumpToIssue(first = false, fixIt = false, requestedColumn = issueColumn, requestedKind = issueKind) {
     if (!sheet || !requestedColumn || busy) return;
-    if (requestedKind === "missing" || requestedKind === "rule_required") {goPhase("impute");return;}
+    if (isMissingIssue(requestedKind)) {goPhase("impute");return;}
     setDrawer(null);
     setIssueColumn(requestedColumn); setIssueKind(requestedKind);
     setBusy(true);
@@ -488,7 +488,7 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
       setSheet(nextSheet);
       const targetKind = found.new_kinds?.[0] || requestedKind;
       if (fixIt && targetKind === "percentage_scale") {setSettingsColumn(requestedColumn);setSelection(null);return;}
-      if(targetKind === "missing" || targetKind === "rule_required"){goPhase("impute");return;}
+      if(isMissingIssue(targetKind)){goPhase("impute");return;}
       setCurrentIssueKind(targetKind);
       if (fixIt) {
         const row = nextSheet.preview.row_indices.indexOf(found.target.row_index);
@@ -625,7 +625,7 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
   const summaryMap = new Map<string, { kind: string; count: number; column: string }>();
   for (const column of sheet.profile.columns) for (const issue of column.issues) {
     const kind = issueKindMap[issue.issue] || (issue.issue.startsWith("rule_") ? issue.issue : "");
-    if (!kind) continue;
+    if (!kind || (phase==="clean" && isMissingIssue(kind))) continue;
     const previous = summaryMap.get(kind);
     summaryMap.set(kind, { kind, count: (previous?.count || 0) + issue.count, column: previous?.column || column.column_name });
   }
@@ -731,7 +731,7 @@ export function InteractiveSheet({ fileId, originalRows, persisted = false, onPh
                   {item.values.map((v, c) => {
                     const kind = sheet.profile.columns.find((column) => column.column_name === sheet.preview.columns[c])?.detected_type || "";
                     const displayed = previewNumber(v, kind, commaSeparators);
-                    const issues = item.issues![c].filter(issue=>!["missing","rule_required"].includes(issue.kind));
+                    const issues = item.issues![c].filter(issue=>!isMissingIssue(issue.kind));
                     function cell(element: HTMLElement): Selection {
                       const rect = element.getBoundingClientRect();
                       const width = Math.min(640, window.innerWidth - 24);
