@@ -566,3 +566,10 @@ Validation: 678 backend tests passed on the integrated changes; 45 focused tests
 - Automatic mode therefore applies deterministic notation/label cleaning, never invents values, and leaves missing values empty. Imputation stays a manual/reviewed action.
 - Distribution confirmed: **private sideload for a few known users** (signed companion installer + manifest; no AppSource for v1). Highlight style confirmed: **soft tint + left border + header count + optional notes, original fills restorable**.
 - Data tier confirmed: **XL — up to ~10M cells / 500k rows × 20 cols / 100 MB**, as a batch/file-based mode, not an instant experience. Requires file-based ingestion, streaming analysis, capped per-cell highlighting (200k cells/run), 16 GB+ RAM, and batch apply with progress/cancel. No add-in code has been written yet; implementation awaits final acceptance of the XL operating conditions.
+
+## 42. GitHub repository — November 24, 2026
+
+- The project is now a git working copy of `https://github.com/arsanyarsanious/DataNeat` on `main`. Machine access uses the existing Windows credential manager entry; no token or secret is stored in the repository.
+- The portable workspace was merged into the established GitHub history, preserving the 30 existing `main` commits alongside the premium UI, upload reliability, issue-specific correction menus, share/AI work and documentation. The merge commit is `8469f72`; the follow-up UTF-8 repair is `ea143a4`.
+- A corrupted-currency-symbol import from an upstream commit was repaired (`€`, `£`, dashes) before pushing.
+- Workflow and pre-push test/build commands are documented in `docs/git-workflow.md`. Future changes should be committed and pushed from the project root; `.env`, build outputs, dependencies and logs are ignored.
