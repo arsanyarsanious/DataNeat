@@ -582,3 +582,9 @@ Validation: 678 backend tests passed on the integrated changes; 45 focused tests
 - Verified in real Excel 365 desktop: task pane loads, analysis runs and returns 17 flagged cells for the test sheet. Highlight writes were refused by this machine's **unlicensed Excel** (Office.js AccessDenied); COM writes work, so the block is the Office license/Protected View, not the analyzer. On licensed Excel, retry after **Enable Editing**. The preview reports a clear write-blocked message.
 - Backend: `/api/addin/analyze` plus `backend/tests/test_addin.py`; full suite **735 passed**. Manifest validates with `office-addin-manifest`.
 - Remaining Phase 1 work: verify formatting on a licensed Excel, tuning for 1–3M cells, then corrections/automatic cleaning (Phase 2).
+
+## 44. Canonical agent handoff — November 24, 2026
+
+- `AGENT_BRIEF.md` is the complete current handoff: product, every feature, architecture, API map, tooling, security findings, deployment drift, unresolved backlog and exact start commands. Read it before continuing.
+- Key live/current caveat: GitHub `main` (`48f8020`) is ahead of the deployed PythonAnywhere build; the Excel add-in Tier L preview exists only as a local companion/manifest and is not deployed.
+- P0 cleanup: remove temporary `/api/diagnostics/*` endpoints + disk fields and rotate `DIAG_TOKEN`; reconcile and verify the live deployment; validate Excel highlighting on a licensed Excel.
