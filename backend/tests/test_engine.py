@@ -130,8 +130,8 @@ def test_transformations():
     assert normalize_missing_values(pd.Series(["NA", "x"]), ["na"])[0] is None
     assert normalize_boolean(pd.Series(["Yes", "maybe"])).tolist() == [True, "maybe"]
     assert normalize_numeric(
-        pd.Series(["$5.00", "â‚¬7.00", "invalid"]), {"kind": "currency"}
-    ).tolist() == ["$5", "â‚¬7", "invalid"]
+        pd.Series(["$5.00", "€7.00", "invalid"]), {"kind": "currency"}
+    ).tolist() == ["$5", "€7", "invalid"]
     assert normalize_numeric(pd.Series(["10.00%"]), {"kind": "percentage"})[0] == "10%"
     assert normalize_numeric(pd.Series(["1,23"]), {})[0] == "1,23"
     with pytest.raises(ValueError):
@@ -199,12 +199,12 @@ def test_supported_date_patterns(value):
 
 
 def test_mixed_numeric_units_are_preserved():
-    values = pd.Series(["100", "10.00%", "$20.00", "â‚¬30.00"])
+    values = pd.Series(["100", "10.00%", "$20.00", "€30.00"])
     assert normalize_numeric(values, {"kind": "integer"}).tolist() == [
         "100",
         "10%",
         "$20",
-        "â‚¬30",
+        "€30",
     ]
 
 
@@ -264,7 +264,7 @@ def test_invalid_dates_can_only_be_cleared_or_corrected_with_approval():
         ["$100", "USD 200", "300"],
         ["100 USD", "200", "300 usd"],
         ["100", "200", "$300"],
-        ["â‚¬100", "EUR 200", "300"],
+        ["€100", "EUR 200", "300"],
     ],
 )
 def test_currency_mixed_labels_detected_and_suggested(values):
@@ -281,7 +281,7 @@ def test_currency_standardization_requires_explicit_assumptions_and_preserves_ot
     from app.core.currency import normalize_currency
 
     values = pd.Series(
-        ["$100.00", "USD 200.00", "300.00", "EUR 400", "â‚¬500", "invalid", "001"]
+        ["$100.00", "USD 200.00", "300.00", "EUR 400", "€500", "invalid", "001"]
     )
     original = values.copy(deep=True)
     safe = normalize_currency(values, {"currency": "USD", "format": "code"})
@@ -290,7 +290,7 @@ def test_currency_standardization_requires_explicit_assumptions_and_preserves_ot
         "USD 200",
         "300.00",
         "EUR 400",
-        "â‚¬500",
+        "€500",
         "invalid",
         "001",
     ]
@@ -308,7 +308,7 @@ def test_currency_standardization_requires_explicit_assumptions_and_preserves_ot
         "USD 200",
         "USD 300",
         "EUR 400",
-        "â‚¬500",
+        "€500",
         "invalid",
         "USD 1",
     ]
@@ -321,7 +321,7 @@ def test_currency_standardization_requires_explicit_assumptions_and_preserves_ot
             "symbol_aliases": ["$"],
         },
     )
-    assert numeric.tolist() == ["100", "200", "300", "EUR 400", "â‚¬500", "invalid", "1"]
+    assert numeric.tolist() == ["100", "200", "300", "EUR 400", "€500", "invalid", "1"]
     for settings in (
         {"currency": ""},
         {"currency": "EUR", "symbol_aliases": ["$"]},

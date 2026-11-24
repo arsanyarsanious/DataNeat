@@ -44,7 +44,7 @@ def normalize_numeric(series, settings):
             except ValueError:
                 number, marker = numeric(v), None
             # Preserve currency identity. Different currencies are never merged.
-            prefix = marker or (text[0] if text and text[0] in "$â‚¬Â£" else "")
+            prefix = marker or (text[0] if text and text[0] in "$€£" else "")
             result = format(number, "f")
             if "." in result:
                 result = result.rstrip("0").rstrip(".")

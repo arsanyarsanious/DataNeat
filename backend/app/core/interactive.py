@@ -133,7 +133,7 @@ def annotate(df, report, part, columns=None):
                         add(finding["issue"], "This value needs an explicit format interpretation or conversion. Choose the input conventions and review the result." if finding["issue"]=="data_format" else "This value is invalid under the detected format. Correct it or use the format controls to specify the intended interpretation.")
                 if c["detected_type"] == "time":
                     if not is_clock_time(value):
-                        add("invalid_time", "Invalid clock time. Correct the hour, minutes or seconds; clock hours must be below 24, or 1â€“12 with AM/PM.")
+                        add("invalid_time", "Invalid clock time. Correct the hour, minutes or seconds; clock hours must be below 24, or 1–12 with AM/PM.")
                     elif "time_format" in kinds:
                         add("time", "Clock time formats are mixed. Choose 24-hour or 12-hour AM/PM notation; the time of day is preserved.")
                 if c["detected_type"] == "duration":
