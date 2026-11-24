@@ -14,7 +14,13 @@ if (-not $Python) {
 
 if (-not (Test-Path (Join-Path $venv "Scripts\python.exe"))) {
   Write-Host "Creating add-in Python environment…"
-  if ($Python -eq "py") { & py -3.12 -m venv $venv }
+  if ($Python -eq "py") {
+    & py -3.12 -m venv $venv 2>$null
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host "Python 3.12 was not found; trying the default Python. This preview is tested on 3.12." -ForegroundColor Yellow
+      & py -3 -m venv $venv
+    }
+  }
   else { & $Python -m venv $venv }
 }
 
