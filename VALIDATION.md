@@ -293,3 +293,10 @@ Backend suite: **61 passed**, including full-column add/remove/no-change behavio
 - Polling is adaptive: 500ms for the first 8 seconds, then 1.5s, so small files open noticeably sooner without flooding the host.
 - Measured before: upload response 8.8s, analysis reported ready after ~65s for a large file. After: local upload + analysis for a small file completes in <1s; upload response no longer waits for analysis or the remote snapshot. Full backend suite re-run after the storage change: **732 passed**.
 - Excel add-in proposal written in `docs/excel-addin-plan.md` (not implemented).
+
+## November 24, 2026 — Excel add-in Tier L preview
+
+- Added `excel-addin/`: local HTTPS companion, Office.js task pane, validated sideload manifest, certificate/setup scripts, bundled Inter font and README. Backend adds read-only `POST /api/addin/analyze` returning column summaries and compact per-cell issue markers.
+- Real Excel 365 desktop test: task pane loaded from `https://localhost:9443`, analyzed a test sheet and returned 17 flagged cells across 6 columns; manifest validated with Microsoft's validator.
+- The test machine's Excel is unlicensed, so Office.js formatting returned AccessDenied (“You cannot perform the requested operation”). Analysis works; highlighting requires a licensed/signed-in Excel and an editable workbook (Enable Editing). The task pane now explains this instead of failing silently.
+- Added tests for the add-in analysis endpoint and cap/truncation. Full backend suite: **735 passed**. Add-in code committed and pushed to GitHub.

@@ -5,6 +5,13 @@ architecture options, phases, risks and the decisions needed from the owner.
 
 ## 0. Confirmed decisions (this round)
 
+**Status:** Phase 1 (Tier L read-only analyzer + on-sheet highlights) is now in
+the repository under `excel-addin/`. Analysis and issue mapping were verified in
+real Excel 365 desktop. Highlight writes are implemented and backed up; the test
+machine’s unlicensed Excel blocks Office.js formatting, so visual highlight
+confirmation requires a licensed Excel. Cleaning/corrections are not implemented
+yet.
+
 - **Windows desktop only** for the first release.
 - **Excel desktop only** (no Excel on the web initially).
 - **Cloud fallback allowed**, but only after explicit per-user consent; local

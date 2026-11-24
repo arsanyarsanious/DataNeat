@@ -1262,5 +1262,7 @@ from .services.ai_assist import install_assist
 install_assist(app, store)
 from .services.account_files import install_account_files
 install_account_files(app, store)
+from .services.addin import install_addin
+install_addin(app)
 from .services.static_site import install_static_site
 install_static_site(app)

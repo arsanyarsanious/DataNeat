@@ -573,3 +573,12 @@ Validation: 678 backend tests passed on the integrated changes; 45 focused tests
 - The portable workspace was merged into the established GitHub history, preserving the 30 existing `main` commits alongside the premium UI, upload reliability, issue-specific correction menus, share/AI work and documentation. The merge commit is `8469f72`; the follow-up UTF-8 repair is `ea143a4`.
 - A corrupted-currency-symbol import from an upstream commit was repaired (`€`, `£`, dashes) before pushing.
 - Workflow and pre-push test/build commands are documented in `docs/git-workflow.md`. Future changes should be committed and pushed from the project root; `.env`, build outputs, dependencies and logs are ignored.
+
+## 43. Excel add-in Tier L preview — November 24, 2026
+
+- Phase 1 preview is implemented under `excel-addin/`: a Windows local companion serves the existing engine over HTTPS and the Office.js task pane at `https://localhost:9443/taskpane.html`; a validated sideload manifest is included.
+- The task pane reads the active sheet, enforces the Tier L ~3M-cell limit, sends the displayed text as CSV to `/api/addin/analyze`, and shows rows/columns/issue cells plus per-column findings. It highlights up to 10,000 flagged cells and stores previous fills for restore (best effort).
+- The local companion uses the same profiler/annotator as the website; no data leaves the machine. Setup/run/certificate scripts are in `excel-addin/companion/`.
+- Verified in real Excel 365 desktop: task pane loads, analysis runs and returns 17 flagged cells for the test sheet. Highlight writes were refused by this machine's **unlicensed Excel** (Office.js AccessDenied); COM writes work, so the block is the Office license/Protected View, not the analyzer. On licensed Excel, retry after **Enable Editing**. The preview reports a clear write-blocked message.
+- Backend: `/api/addin/analyze` plus `backend/tests/test_addin.py`; full suite **735 passed**. Manifest validates with `office-addin-manifest`.
+- Remaining Phase 1 work: verify formatting on a licensed Excel, tuning for 1–3M cells, then corrections/automatic cleaning (Phase 2).

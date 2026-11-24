@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DataNeat for Excel</title>
+  <link rel="stylesheet" href="taskpane.css" />
+  <script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>
+      <div><strong>DataNeat</strong><small>for Excel</small></div>
+    </div>
+    <span class="tier">Tier L preview</span>
+  </header>
+
+  <main>
+    <section class="intro">
+      <h1>Find the messy cells.<br />Keep your workbook.</h1>
+      <p>Analyze the active sheet in place. DataNeat highlights issues without changing values.</p>
+      <label class="toggle"><input id="hasHeader" type="checkbox" checked /> First row contains column names</label>
+    </section>
+
+    <section class="actions">
+      <button id="analyze" class="primary" type="button">Analyze active sheet</button>
+      <button id="highlight" class="secondary" type="button" disabled>Highlight issues</button>
+      <button id="clear" class="ghost" type="button">Clear highlights</button>
+    </section>
+
+    <div id="status" class="status" role="status" aria-live="polite">Ready. Select a worksheet, then analyze.</div>
+
+    <section id="summary" class="summary" hidden>
+      <div class="metrics">
+        <div><span id="metricRows">—</span><small>rows</small></div>
+        <div><span id="metricCols">—</span><small>columns</small></div>
+        <div><span id="metricCells">—</span><small>cells</small></div>
+        <div><span id="metricIssues">—</span><small>issue cells</small></div>
+      </div>
+      <p id="truncated" class="notice" hidden></p>
+    </section>
+
+    <section id="issues" class="issues" hidden>
+      <div class="section-head"><h2>Issues by column</h2><span id="issueCount"></span></div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Column</th><th>Type</th><th>Findings</th></tr></thead>
+          <tbody id="issueRows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="limits">
+      <strong>Read-only preview</strong>
+      <p>Highlights are painted in the sheet and can be cleared. Cleaning is the next phase; values are never changed by this build.</p>
+      <p id="capNote"></p>
+    </section>
+  </main>
+
+  <footer>
+    <span>Local processing</span><span>·</span><span>Tier L · up to 3M cells</span>
+  </footer>
+
+  <script src="taskpane.js"></script>
+</body>
+</html>
