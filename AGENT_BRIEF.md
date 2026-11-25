@@ -10,8 +10,10 @@ visible outcomes and screenshots, and explicit approval before broad changes.
 
 This is the canonical handoff. Older documents are valuable but contain
 historical or stale statements; when they conflict, trust the code and this
-brief. `PROJECT_CONTEXT.md` has the long chronological record (§1–§43) and
-`docs/git-workflow.md` documents pushes.
+brief. `PROJECT_CONTEXT.md` has the long chronological record (§1–§44) and
+`docs/git-workflow.md` documents pushes. **`SECURITY_AUDIT.md` is the current
+security review** (findings, evidence, authorization tests and remediation
+order); read it before exposing any API or companion service.
 
 **Standing owner rule:** every change to the app must also update this brief and
 the relevant GitHub Markdown (`README.md`, `PROJECT_CONTEXT.md`, feature docs
@@ -578,15 +580,21 @@ at the localhost task pane. No cloud data path exists in this preview.
 
 ### 5.7 Known security issues / cleanup required
 
+**Full review: `SECURITY_AUDIT.md`.** The public Excel-web tunnel and
+unauthenticated companion were stopped after that audit; do not restart them
+without add-in token auth and exact-origin CORS.
+
 1. **Temporary diagnostics are still in the repository and live config**
    (`/api/diagnostics/tail|benchmark|background|background-status`, `DIAG_TOKEN`
    in hidden config, disk fields in `/api/health`, diagnostics in
    `public_paths`). Token-protected but unnecessary in production; tail can
-   expose access/error logs (IPs), benchmark can burn CPU. Remove endpoints,
-   disk fields and token; rotate the token; update public paths.
+   expose access/error logs (IPs, share URLs), benchmark can burn CPU. Remove
+   endpoints, disk fields and token; rotate the token; redeploy.
 2. **Live deployment is behind repo main**; deploying merged code may expose
    untested features. Compare, test, then deploy; do not assume.
-3. **Add-in companion unauthenticated localhost API** (above).
+3. **Add-in companion unauthenticated localhost API**: it was exposed through a
+   public quick tunnel during Excel-web testing; both are stopped. Add a
+   per-launch token, exact-origin CORS and protected tunnel before reuse.
 4. **Self-signed CA cert** and Python dependency/installer not production-grade.
 5. **Share/PII**: share tokens are bearer secrets; PDF/preview values visible;
    warn users; limit TTL.
@@ -614,6 +622,8 @@ at the localhost task pane. No cloud data path exists in this preview.
     without restore.
 16. **No CSP** on taskpane/static app; Office.js CDN is required; consider
     CSP headers for hosted pages.
+17. **Authentication fails open** if Supabase env is absent on a public
+    deployment; add an explicit `REQUIRE_AUTH` deployment guard.
 
 ### 5.8 Privacy/retention
 
@@ -922,6 +932,7 @@ Known environment quirks:
 - `docs/upload-reliability.md` — async analysis/timeout history
 - `docs/percentage-scale.md` — Phase A decisions
 - `docs/issue-corrections.md` — per-issue menu relevance
+- `SECURITY_AUDIT.md` — current security findings, authorization test evidence and remediation order
 - `PROJECT_CONTEXT.md` — chronological product history
 
 ## 12. Quick reference

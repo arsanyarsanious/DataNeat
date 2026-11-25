@@ -1,5 +1,7 @@
 # DataNeat
 
+> **Security:** see [SECURITY_AUDIT.md](SECURITY_AUDIT.md) before exposing the API, the Excel companion or a public tunnel.
+
 > **Maintenance rule:** every app change must also update [AGENT_BRIEF.md](AGENT_BRIEF.md), this README when relevant, and the relevant files under `docs/`, in the same commit.
 
 > **Agent handoff:** read [AGENT_BRIEF.md](AGENT_BRIEF.md) first for the complete current architecture, feature inventory, security findings and unfinished work.

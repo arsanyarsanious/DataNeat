@@ -309,3 +309,9 @@ Backend suite: **61 passed**, including full-column add/remove/no-change behavio
 - Web mode uses 1M-cell/5k-highlight limits and 5k-row batches. Final Excel-web Highlight/Clear verification pending.
 - Full backend suite remains **736 passed** after the CORS/JSON changes.
 - Excel web Analyze succeeded on a 5,555 × 36 sheet (31,823 issue cells). Highlight hit Office’s request-payload limit; original-fill backup, fill application, and clear/restore now run in 200-range batches with a sync per batch. Retest after reopening the add-in.
+
+## November 25, 2026 — Security review
+
+- Added `SECURITY_AUDIT.md`: secret scan, authorization-boundary tests, live endpoint/header probes, and prioritized findings. No real server-side API keys found in tracked files; one fake test secret only.
+- Highest-risk finding: the Excel-web quick tunnel exposed the unauthenticated local companion with a broad `*.trycloudflare.com` CORS regex. The tunnel and companion were stopped after the review.
+- Open P0: remove production diagnostics/disk fields and rotate `DIAG_TOKEN`; add a fail-closed `REQUIRE_AUTH` guard; redeploy the live host. No app code was changed in this review.
