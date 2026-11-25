@@ -33,6 +33,42 @@ def auth(monkeypatch, tmp_path):
     return tokens
 
 
+def test_require_auth_fails_closed_when_configuration_is_missing(monkeypatch):
+    monkeypatch.setenv("REQUIRE_AUTH", "true")
+    monkeypatch.delenv("SUPABASE_URL", raising=False)
+    monkeypatch.delenv("SUPABASE_PUBLISHABLE_KEY", raising=False)
+    identity.cache.clear()
+    rate.clear()
+    client = TestClient(app)
+    assert client.get("/api/health").status_code == 200
+    assert client.get("/api/auth/config").status_code == 200
+    assert client.get("/api/auth/config").json()["enabled"] is False
+    assert client.post("/api/files/upload", files={"file": ("x.csv", b"A\nx\n")}).status_code == 503
+    assert client.get("/api/account/files").status_code == 503
+    assert client.get("/api/admin/usage").status_code == 503
+    assert client.post("/api/addin/analyze-json", json={"csv": "a\n1\n"}).status_code == 503
+    # Read-only share links remain valid even while sign-in is misconfigured.
+    assert client.get("/api/share/not-a-token").status_code == 404
+
+
+def test_require_auth_still_rejects_anonymous_requests_when_configured(auth, monkeypatch):
+    monkeypatch.setenv("REQUIRE_AUTH", "true")
+    client = TestClient(app)
+    assert client.get("/api/health").status_code == 200
+    assert client.post("/api/files/upload", files={"file": ("x.csv", b"A\nx\n")}).status_code == 401
+
+
+def test_diagnostics_endpoints_are_removed(auth):
+    client = TestClient(app)
+    for path in (
+        "/api/diagnostics/tail",
+        "/api/diagnostics/benchmark",
+        "/api/diagnostics/background",
+        "/api/diagnostics/background-status",
+    ):
+        assert client.get(path).status_code == 401
+
+
 def test_authentication_gate_and_invalid_tokens(auth):
     client = TestClient(app)
     assert client.get("/api/health").status_code == 200

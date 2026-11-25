@@ -44,18 +44,18 @@ The app is intentionally more “careful data review” than “one-click magic�
 
 | Area | State |
 |---|---|
-| GitHub | `main` at `48f8020`, clean working tree, remote configured with credential-manager auth |
+| GitHub | `main` (check `git log`; the security/P0 changes are committed and pushed), clean working tree, remote configured with credential-manager auth |
 | Web app (live) | https://arsany.pythonanywhere.com/ — PythonAnywhere free, one worker, 60s proxy timeout, 512 MiB disk |
 | Live limits | 5 MiB upload, 15,000 rows, 75 columns, 250,000-cell analysis budget, 300 MB snapshot budget, 200 stored records; 30 saved files / 40 MiB per account |
-| Live auth | Supabase enabled, Google sign-in enabled; public share routes only auth bypass |
-| Live deployment | **Behind GitHub main.** Last deployed web build was the premium UI + async upload + issue-menu work. The later 30-commit merge (outlier/distribution/imputation refinements, etc.) and the Excel add-in endpoint are **not deployed**. Health still exposes the temporary disk diagnostics. |
-| Backend tests | **736 passed** (41 test files), last run after the add-in endpoint |
+| Live auth | Supabase enabled, Google sign-in enabled; `REQUIRE_AUTH=true` fail-closed guard deployed; public share routes only auth bypass |
+| Live deployment | **Behind GitHub main.** On 2026-11-25 a minimal P0 patch of the live `main.py` removed diagnostics/disk fields and added the auth guard; the live config had `DIAG_TOKEN`/`ERROR_LOG` removed and `REQUIRE_AUTH` enabled. The full merged backend (workflow/add-in/etc.) is still not deployed. Live health now returns only status/limits. |
+| Backend tests | **739 passed** (41 test files), including P0 auth-guard and diagnostics-removal tests |
 | Frontend | TypeScript + `CLOUDFLARE_EXPORT=1` production build last passed after the history merge; Excel add-in has no frontend build step |
 | Excel add-in | Tier L **read-only preview** implemented locally. Real Excel task pane loads and analysis works; highlighting is implemented but was blocked on this machine by unlicensed Excel / Protected View. Not installed for other users yet. |
 | Excel on the web | Analyze works in Excel web (sheet with 5,555 rows / 36 columns returned 31,823 issue cells). Highlight initially hit Office’s request-payload limit because thousands of ranges were sent in one sync; fill/backup/clear are now batched 200 ranges per sync. Retest highlight pending. |
 | Excel manifest | Validated with Microsoft’s `office-addin-manifest`; SourceLocation `https://localhost:9443/taskpane.html` |
-| Deployment status file | `C:\Users\Arsany Arsanious\Documents\Codex\outputs\dataneat-deployment\DEPLOYMENT_STATUS.md`; last entry says “Excel add-in proposal only”, so it is **stale** |
-| Local add-in companion | Can run on `https://localhost:9443`; certificate trusted for current Windows user; test Excel workbook exists in the workspace (not repo) |
+| Deployment status file | `C:\Users\Arsany Arsanious\Documents\Codex\outputs\dataneat-deployment\DEPLOYMENT_STATUS.md`; updated for the P0 patch, but full-live reconciliation remains |
+| Local add-in companion | Can run on `https://localhost:9443`; certificate trusted for current Windows user; test Excel workbook exists in the workspace (not repo). The public tunnel is stopped. |
 
 **Immediate source-of-truth caveat:** deploy decisions must compare repo `main`
 with the live backend/static build. Do not assume live is current.
@@ -392,9 +392,7 @@ this dev sandbox. **Excel:** Office.js + local TLS FastAPI companion.
 
 ### 4.3 Backend structure
 
-`main.py`: middleware/auth/rate limits/CORS/body limit, upload/analysis,
-workspace/preview/editor/editor-fix/undo, jobs/workflow init, exports, health,
-diagnostics, static mount. Installs services at bottom.
+`main.py`: middleware/auth/rate limits/CORS/body limit, upload/analysis, workspace/preview/editor/editor-fix/undo, jobs/workflow init, exports, health, auth guard, static mount. Installs services at bottom.
 
 `core/`:
 - `file_parser.py` CSV/XLSX parsing and limits
@@ -428,8 +426,7 @@ diagnostics, static mount. Installs services at bottom.
 
 Public/non-auth paths: `/api/health`, `/api/auth/config`,
 `/api/auth/session`, `/api/auth/logout`, `/api/share/{token}`,
-`/api/share/{token}/report`, plus temporary `/api/diagnostics/*` currently in
-`public_paths`.
+`/api/share/{token}/report`. Diagnostics routes were removed 2026-11-25.
 
 Key routes:
 - `POST /api/files/upload`, `/inspect-workbook`
@@ -449,7 +446,7 @@ Key routes:
 - `/api/addin/analyze` (multipart) and `/api/addin/analyze-json` (Excel-web path)
 - `/api/admin/usage` (admin only)
 - `/api/auth/me`, `/api/auth/sign-in-event`
-- temporary `/api/diagnostics/{tail,benchmark,background,background-status}`
+- No diagnostics endpoints; `/api/health` returns status/limits only
 
 ### 4.5 Revision/workflow invariants
 
@@ -584,17 +581,20 @@ at the localhost task pane. No cloud data path exists in this preview.
 unauthenticated companion were stopped after that audit; do not restart them
 without add-in token auth and exact-origin CORS.
 
-1. **Temporary diagnostics are still in the repository and live config**
-   (`/api/diagnostics/tail|benchmark|background|background-status`, `DIAG_TOKEN`
-   in hidden config, disk fields in `/api/health`, diagnostics in
-   `public_paths`). Token-protected but unnecessary in production; tail can
-   expose access/error logs (IPs, share URLs), benchmark can burn CPU. Remove
-   endpoints, disk fields and token; rotate the token; redeploy.
-2. **Live deployment is behind repo main**; deploying merged code may expose
-   untested features. Compare, test, then deploy; do not assume.
+1. **Diagnostics cleanup completed 2026-11-25.** Removed
+   `/api/diagnostics/*`, disk fields from `/api/health`, and the entries from
+   `public_paths`; removed `DIAG_TOKEN`/`ERROR_LOG` from the live config (token
+   capability no longer exists); redeployed and verified minimal health and
+   OpenAPI. A future rollback to an old build would reintroduce them; re-check
+   after any restore.
+2. **Live deployment is behind repo main**; the P0 patch is live, but the full
+   merged backend (workflows, add-in endpoint, other changes) is not. Deploying
+   it still needs the normal test/browser/rollback process. Compare and verify;
+   do not assume.
 3. **Add-in companion unauthenticated localhost API**: it was exposed through a
-   public quick tunnel during Excel-web testing; both are stopped. Add a
-   per-launch token, exact-origin CORS and protected tunnel before reuse.
+   public quick tunnel during Excel-web testing; the tunnel and companion are
+   stopped. Add a per-launch token, exact-origin CORS and protected tunnel
+   before reuse.
 4. **Self-signed CA cert** and Python dependency/installer not production-grade.
 5. **Share/PII**: share tokens are bearer secrets; PDF/preview values visible;
    warn users; limit TTL.
@@ -622,8 +622,10 @@ without add-in token auth and exact-origin CORS.
     without restore.
 16. **No CSP** on taskpane/static app; Office.js CDN is required; consider
     CSP headers for hosted pages.
-17. **Authentication fails open** if Supabase env is absent on a public
-    deployment; add an explicit `REQUIRE_AUTH` deployment guard.
+17. **Authentication fail-open guard implemented 2026-11-25**: `REQUIRE_AUTH=true`
+    returns 503 for protected APIs when Supabase URL/key are absent; local
+    development/companion defaults to false. Covered by tests; live config
+    enables it. Keep it true on any public deployment.
 
 ### 5.8 Privacy/retention
 
@@ -651,7 +653,7 @@ $env:STORAGE_DIR = "$tmp\test-store"
 & "$venv\Scripts\python.exe" -m pytest "$project\backend\tests" -q `
   -p no:cacheprovider --basetemp="$tmp\pytest-run"
 ```
-Latest: **736 passed** (2 pre-existing deprecation warnings).
+Latest: **739 passed** (2 pre-existing deprecation warnings).
 
 ### 6.2 Frontend typecheck/build
 
@@ -746,15 +748,17 @@ last deploy**.
 
 ### P0 — do before calling the current work “shipped”
 
-1. **Remove diagnostics from repo and production**:
-   - delete `/api/diagnostics/*` endpoints, disk fields from `/api/health`, and
+1. **Diagnostics/auth P0 — completed 2026-11-25**:
+   - removed `/api/diagnostics/*` endpoints, disk fields from `/api/health`, and
      `public_paths` entries;
-   - remove/rotate `DIAG_TOKEN` in the private PA config;
-   - redeploy backend and verify.
+   - removed `DIAG_TOKEN`/`ERROR_LOG` from live config (token capability gone);
+   - added and tested `REQUIRE_AUTH` fail-closed guard; live config enables it;
+   - deployed the minimal P0 patch to the live host and verified health/OpenAPI.
 2. **Reconcile live with repo `main`**:
-   - fetch/diff deployed source vs repo; deploy the merged backend/static after
-     running the 736 tests + frontend build + browser smoke;
-   - update `DEPLOYMENT_STATUS.md` (it currently says add-in is only a plan).
+   - the live host is still behind the full repo (workflows, add-in endpoint,
+     later features); fetch/diff, run the 739 tests + frontend build + browser
+     smoke, then deploy with the normal rollback path;
+   - update `DEPLOYMENT_STATUS.md`.
 3. **Verify Excel highlighting on a licensed Excel**, and retest the new JSON
    path in Excel web:
    - In Excel web, close/reopen the add-in to pick up the updated task pane;
@@ -821,8 +825,9 @@ last deploy**.
 2. Reproduce the backend suite and frontend build with the commands in §6.
 3. Inspect `git log --oneline -10` and compare live `/api/health`/pages with
    repo `main`.
-4. Remove the P0 diagnostics, then deploy the reconciled main to PA using the
-   workspace scripts and verify a real login/upload/clean/export.
+4. The P0 diagnostics/auth cleanup is deployed; compare the live minimal patch
+   with repo `main`, then deploy the reconciled main to PA using the workspace
+   scripts and verify a real login/upload/clean/export.
 5. Keep the invariants in §9.
 
 ### If continuing the Excel add-in
@@ -879,7 +884,7 @@ stable first.
 | Bundled Python 3.12 venv (`dnvenv`) | backend runs/tests; project has no committed venv |
 | Node.js 24 + pnpm 11 (bundled paths) | frontend install/typecheck/build; **no npm in bundle** |
 | Next.js 16 / React 19 / TypeScript | frontend |
-| pytest 9 | 41 backend test files, 736 tests |
+| pytest 9 | 41 backend test files, 739 tests |
 | Playwright 1.64 + Chromium | browser QA against local and live builds |
 | httpx / requests | API probes and deployment tests |
 | PythonAnywhere API | file upload, static upload, reload; token in private folder |
@@ -940,12 +945,13 @@ Known environment quirks:
 | Item | Value |
 |---|---|
 | Repo | https://github.com/arsanyarsanious/DataNeat |
-| Branch/commit | `main` / `48f8020` |
+| Branch/commit | `main` / latest commit (see `git log`) |
 | Live | https://arsany.pythonanywhere.com/ |
 | Local project | `C:\Users\Arsany Arsanious\Desktop\DataNeat-Portable` |
 | Backend venv | `C:\Users\Arsany Arsanious\Documents\deepseek-harness\default-workspace\dnvenv` |
-| Backend tests | 736 passed |
-| API health (live) | `/api/health` returns caps + disk diagnostics |
+| Backend tests | 739 passed |
+| API health (live) | `/api/health` returns status/limits only (no disk fields) |
+| Auth guard | `REQUIRE_AUTH=true` in live config; fail-closed if Supabase is missing |
 | Excel task pane | `https://localhost:9443/taskpane.html` |
 | Excel manifest | `excel-addin/manifest.xml` |
 | Add-in test workbook | `C:\Users\Arsany Arsanious\Documents\deepseek-harness\default-workspace\DataNeat-addin-test.xlsx` (not repo) |

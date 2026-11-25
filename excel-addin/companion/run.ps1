@@ -37,6 +37,10 @@ $env:ANALYSIS_SYNC_CELLS = "0"
 $env:AI_ASSIST_ENABLED = "false"
 $env:COOKIE_SECURE = "false"
 $env:CORS_ORIGINS = "https://localhost:9443"
+# The companion is a local, intentionally unauthenticated desktop helper. Never
+# set REQUIRE_AUTH here, and never expose it through a public tunnel without a
+# separate access-control layer.
+$env:REQUIRE_AUTH = "false"
 # The web-tunnel helper serves the same task pane from a temporary
 # *.trycloudflare.com origin; allow only that host pattern, not arbitrary sites.
 $env:CORS_ORIGIN_REGEX = "https://([a-z0-9-]+\.)?trycloudflare\.com"

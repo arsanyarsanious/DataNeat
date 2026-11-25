@@ -310,8 +310,20 @@ Backend suite: **61 passed**, including full-column add/remove/no-change behavio
 - Full backend suite remains **736 passed** after the CORS/JSON changes.
 - Excel web Analyze succeeded on a 5,555 × 36 sheet (31,823 issue cells). Highlight hit Office’s request-payload limit; original-fill backup, fill application, and clear/restore now run in 200-range batches with a sync per batch. Retest after reopening the add-in.
 
+## November 25, 2026 — P0 security cleanup
+
+- Removed `/api/diagnostics/*`, disk fields from `/api/health`, and diagnostics entries from `public_paths`; changed health to status/limits only.
+- Added `REQUIRE_AUTH`: when true, non-public APIs return 503 if Supabase URL/key are absent. Read-only share links and health/config stay available. Added three tests for fail-closed behavior, configured-auth rejection, and diagnostics removal.
+- Full backend suite: **739 passed**.
+- Removed `DIAG_TOKEN` and `ERROR_LOG` from the live PythonAnywhere config, set `REQUIRE_AUTH=true` (string, required because the launcher copies values into `os.environ`), deployed a minimal P0 patch of the live `main.py`, reloaded and verified:
+  - live `/api/health` returns only `{status, max_upload_mb, max_rows, max_columns}`;
+  - `/openapi.json` has no diagnostics paths;
+  - protected requests without a session return 401;
+  - invalid share tokens still return 404.
+- The full merged repo backend is still not deployed; only the security P0 patch was applied live.
+
 ## November 25, 2026 — Security review
 
 - Added `SECURITY_AUDIT.md`: secret scan, authorization-boundary tests, live endpoint/header probes, and prioritized findings. No real server-side API keys found in tracked files; one fake test secret only.
 - Highest-risk finding: the Excel-web quick tunnel exposed the unauthenticated local companion with a broad `*.trycloudflare.com` CORS regex. The tunnel and companion were stopped after the review.
-- Open P0: remove production diagnostics/disk fields and rotate `DIAG_TOKEN`; add a fail-closed `REQUIRE_AUTH` guard; redeploy the live host. No app code was changed in this review.
+- P0 follow-up completed in the P0 section above; remaining P1/P2 items are tracked in `SECURITY_AUDIT.md`.

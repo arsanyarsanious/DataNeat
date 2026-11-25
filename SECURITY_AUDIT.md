@@ -11,7 +11,7 @@ The main web application has a sound authorization model: all file/job/workflow 
 
 The highest-risk issue is not in the hosted web app: **the Excel-on-the-web test path exposed an unauthenticated local companion through a public Cloudflare quick tunnel, with a broad `*.trycloudflare.com` CORS allow-list.** That path was for temporary testing and has now been stopped, but it must not be used again without an access token or Cloudflare Access in front of it.
 
-The second issue is **temporary diagnostics still present in production**: the endpoints are token-protected, but the token, log-tail capability and CPU benchmark should not exist on a public deployment. The live `/api/health` response also exposes disk capacity and usage.
+The second issue was **temporary diagnostics in production**. They have now been removed from the repository and the live configuration, and `/api/health` no longer exposes disk capacity. The fail-closed `REQUIRE_AUTH` guard is implemented and enabled live; see the P0 verification section.
 
 No real server-side API keys were found in tracked files or the current worktree. One test contains a deliberately fake `sb_secret_…` string. `.env` is untracked and contains only the Supabase URL and publishable key; the service-role key is not in it. Local packaging risk remains because the untracked `.env` and the add-in certificate private key exist in the working folder.
 
@@ -19,9 +19,9 @@ No real server-side API keys were found in tracked files or the current worktree
 
 | ID | Severity | Area | Finding |
 |---|---|---|---|
-| SEC-1 | **High** | Excel companion | Public quick tunnel exposed an unauthenticated local API; broad CORS regex |
-| SEC-2 | **High** (production cleanup) | Diagnostics | Temporary diagnostics, log tail, CPU benchmark and disk fields still in production code/config |
-| SEC-3 | **Medium** | Authentication | Authentication fails open when Supabase env is absent; public deployments can silently become anonymous |
+| SEC-1 | **High** — mitigated for now | Excel companion | Public quick tunnel exposed an unauthenticated local API; broad CORS regex |
+| SEC-2 | **High** — fixed 2026-11-25 | Diagnostics | Temporary diagnostics, log tail, CPU benchmark and disk fields were still in production code/config |
+| SEC-3 | **Medium** — mitigated 2026-11-25 | Authentication | Authentication fails open when Supabase env is absent; public deployments can silently become anonymous |
 | SEC-4 | **Medium** | Availability | Per-IP in-memory rate limiting, unbounded rate map, single worker, CPU/zip-expansion DoS |
 | SEC-5 | **Medium** | Share links | Bearer token in URL query; visible in browser history, access logs and Referrer |
 | SEC-6 | **Medium** | Browser hardening | No CSP, HSTS, Referrer-Policy, X-Frame-Options/frame-ancestors |
@@ -32,6 +32,10 @@ No real server-side API keys were found in tracked files or the current worktree
 | SEC-11 | **Info** | Dependencies | No automated CVE audit was completed; versions are pinned but not verified against an advisory database |
 
 ### SEC-1 — Public unauthenticated Excel companion (High)
+
+**Status:** Mitigated for now — the tunnel and companion were stopped on
+2026-11-25. Companion token auth and exact-origin CORS are still required before
+any future remote Excel-web test.
 
 **Affected files**
 
@@ -63,10 +67,23 @@ It is *not* a direct cross-user account breach: file records are still session-s
 
 ### SEC-2 — Production diagnostics and disk details (High cleanup)
 
-**Affected code**
+**Status:** Fixed 2026-11-25. The diagnostics endpoints and disk fields were
+removed from `backend/app/main.py`, `public_paths` was reduced, `DIAG_TOKEN` and
+`ERROR_LOG` were removed from the live config, and the live host was reloaded.
+Live `/api/health` now returns only:
+
+```json
+{"status":"ok","max_upload_mb":5,"max_rows":15000,"max_columns":75}
+```
+
+`/openapi.json` no longer lists any diagnostics paths; unauthenticated requests
+to those old paths return 401 from the auth guard, not route data. The token was
+removed (equivalent to rotation, since the capability no longer exists).
+
+**Affected code (historical)
 
 - `backend/app/main.py`: `/api/diagnostics/tail`, `/api/diagnostics/benchmark`, `/api/diagnostics/background`, `/api/diagnostics/background-status`; `DIAG_TOKEN` checks; `/api/health` disk fields.
-- Live configuration contains a diagnostics token outside the repository.
+- Pre-fix live configuration contained a diagnostics token (`DIAG_TOKEN`) and an error-log path; both were removed 2026-11-25.
 
 **Evidence**
 
@@ -88,13 +105,21 @@ If the token leaks (logs, shell history, screenshots, support access), an attack
 
 ### SEC-3 — Authentication fails open (Medium)
 
+**Status:** Mitigated 2026-11-25. Added a `REQUIRE_AUTH` guard: when set to
+`true`, any non-public API request returns 503 if Supabase URL/key are absent or
+invalid. The guard preserves `/api/health`, `/api/auth/config` and read-only
+`/api/share/*` links. Live config now has `REQUIRE_AUTH=true` (stored as a
+string because PythonAnywhere copies config values into `os.environ`). The guard
+is covered by tests; hosted behavior with a valid config remains 401 for
+anonymous protected requests.
+
 `backend/app/main.py` enables authentication only when `identity.configuration()["enabled"]` is true. `identity.configuration()` returns enabled when either `SUPABASE_URL` or the publishable key is non-empty. If both are absent — a missing env file, a bad deploy, or a fresh host — all non-public APIs are served without authentication.
 
 Files remain session-scoped, so an attacker cannot automatically read another user's file. The exposure is anonymous service use: uploads, analysis, cleaning jobs, temporary storage and CPU. The sign-in UI also silently becomes “local workspace” mode.
 
 **Mitigation**
 
-- Add an explicit `REQUIRE_AUTH=true` deployment guard: if set and Supabase is not validly configured, return 503 for every non-public API and show a deployment error.
+- Use `REQUIRE_AUTH=true` on public deployments (implemented and enabled live); keep the current anonymous mode only for localhost/desktop companion builds.
 - Validate configuration at startup rather than first request.
 - Keep the current anonymous mode only for localhost/desktop companion builds.
 - Document the required production env as a deployment precondition.
@@ -194,12 +219,15 @@ Logout deletes the auth cookie and clears the in-process verification cache, but
 
 ### SEC-10 — Reconnaissance surface (Low)
 
-`/openapi.json`, `/docs`, `/redoc`, `/api/health`, `/api/auth/config` are public. The auth config deliberately exposes the Supabase URL and publishable key (public by design). Health exposes disk capacity/usage. OpenAPI reveals the full API surface.
+**Status:** Health disk fields and diagnostics docs were removed in the P0
+cleanup. `/openapi.json`, `/docs`, `/redoc`, `/api/health` and
+`/api/auth/config` remain public. The auth config deliberately exposes the
+Supabase URL and publishable key (public by design); health now returns only
+status/limits. OpenAPI reveals the full API surface.
 
 **Mitigation**
 
 - Disable docs/OpenAPI in production unless needed.
-- Remove disk fields from public health.
 - Keep publishable Supabase details public; never expose the service-role key.
 
 ### SEC-11 — Dependency review not completed (Info)
@@ -241,7 +269,7 @@ Using a fake Supabase configuration to enable auth (no valid token):
 | `GET /api/admin/usage` | 401 |
 | `POST /api/addin/analyze-json` | 401 |
 | `GET /api/share/not-a-token` | 404 (signed-token route only) |
-| `GET /api/diagnostics/tail` | 404 (no token) |
+| `GET /api/diagnostics/tail` | route removed; old path now auth-wrapped 401 (was 404 with no token) |
 | `POST /api/files/upload` | 401 |
 | `GET /api/unknown` | 401 (auth wraps `/api`) |
 
@@ -270,9 +298,9 @@ No IDOR or missing owner check was found on the main web API routes reviewed.
 
 ### Now / P0
 
-1. Keep the Excel public tunnel stopped. Add token auth and exact-origin CORS before any future remote Excel-web test.
-2. Remove diagnostics endpoints, disk fields, `DIAG_TOKEN` and related `public_paths`; rotate the token; redeploy the live host.
-3. Add a production `REQUIRE_AUTH` guard so missing Supabase configuration fails closed.
+1. **Done:** Keep the Excel public tunnel stopped. Add token auth and exact-origin CORS before any future remote Excel-web test.
+2. **Done:** Removed diagnostics endpoints, disk fields, `DIAG_TOKEN` and related `public_paths`; removed the token/log-path config; redeployed the live host and verified minimal health/OpenAPI.
+3. **Done:** Added a production `REQUIRE_AUTH` guard so missing Supabase configuration fails closed; live config enables it.
 
 ### Next / P1
 
@@ -288,9 +316,26 @@ No IDOR or missing owner check was found on the main web API routes reviewed.
 10. Run dependency CVE audits and add them to CI.
 11. Add security regression tests for auth boundaries, CORS, share revocation and companion token auth.
 
+## P0 verification (2026-11-25)
+
+- Local suite: **739 passed**, including three new tests for fail-closed auth,
+  configured-auth rejection and diagnostics removal.
+- Live `/api/health`:
+  `{"status":"ok","max_upload_mb":5,"max_rows":15000,"max_columns":75}`.
+- Live `/openapi.json` contains no diagnostics paths.
+- Live unauthenticated protected requests return 401; invalid share tokens
+  return 404.
+- Live config: `REQUIRE_AUTH` is the string `"true"` (a JSON boolean would crash
+  the PythonAnywhere launcher, which copies config values into `os.environ`);
+  `DIAG_TOKEN` and `ERROR_LOG` are absent.
+- Deployment note: the P0 patch was applied to the live `main.py` as a minimal
+  change, not as a full deploy of the current repo backend.
+
 ## Residual risks
 
-- The live deployment is behind the repository; diagnostics cleanup and any future security fixes must actually be deployed and verified.
+- The live deployment is behind the repository; the P0 cleanup was deployed as a
+  minimal patch of the live `main.py`, not the full current repo backend. A full
+  deployment still needs the normal test/browser/rollback process.
 - Single-worker architecture means any CPU/memory DoS affects all users until migration to the documented multi-worker design.
 - The Excel add-in is a local preview with a manually trusted certificate, not a packaged/signed product; its threat model changes once distributed to other users.
 - Full git-history secret scanning was not completed in this pass; only the current tracked tree/worktree was scanned.

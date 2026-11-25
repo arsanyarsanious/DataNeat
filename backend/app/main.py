@@ -136,7 +136,19 @@ async def session_and_limits(request: Request, call_next):
     request.state.session = session
     request.state.user = None
     path = request.url.path
-    public_paths = {"/api/health", "/api/auth/config", "/api/auth/session", "/api/auth/logout", "/api/diagnostics/tail", "/api/diagnostics/benchmark", "/api/diagnostics/background", "/api/diagnostics/background-status"}
+    public_paths = {"/api/health", "/api/auth/config", "/api/auth/session", "/api/auth/logout"}
+    auth_config = identity.configuration()
+    auth_ready = bool(auth_config.get("enabled") and auth_config.get("url") and auth_config.get("publishable_key"))
+    if (
+        os.getenv("REQUIRE_AUTH", "false").lower() == "true"
+        and not auth_ready
+        and path not in public_paths
+        and not path.startswith("/api/share/")
+    ):
+        return JSONResponse(
+            {"detail": "This deployment is not configured for sign-in; access is disabled."},
+            status_code=503,
+        )
     key = request.client.host if request.client else "local"
     now = time.monotonic()
     queue = rate[key]
@@ -151,7 +163,7 @@ async def session_and_limits(request: Request, call_next):
     if length and (not length.isdigit() or int(length) > MAX_UPLOAD + 1024 * 1024):
         return JSONResponse({"detail": "Upload limit exceeded"}, status_code=413)
     if (
-        identity.configuration()["enabled"]
+        auth_config.get("enabled")
         and path not in public_paths
         and not path.startswith("/api/share/")
     ):
@@ -215,92 +227,8 @@ async def unexpected(request, exc):
 @app.get("/api/health")
 def health():
     from .core.file_parser import MAX_ROWS, MAX_COLUMNS
-    payload = {"status": "ok", "max_upload_mb": MAX_UPLOAD // (1024 * 1024),
-               "max_rows": MAX_ROWS, "max_columns": MAX_COLUMNS}
-    try:
-        import shutil
-        usage = shutil.disk_usage("/")
-        payload["disk_total_mb"] = usage.total // (1024 * 1024)
-        payload["disk_free_mb"] = usage.free // (1024 * 1024)
-        payload["storage_mb"] = round(
-            sum(path.stat().st_size for path in store.root.glob("*.bin")) / (1024 * 1024), 1
-        )
-    except Exception:
-        pass
-    return payload
-
-
-@app.get("/api/diagnostics/benchmark")
-def diagnostics_benchmark(request: Request, rows: int = 5000, cols: int = 10):
-    token = os.getenv("DIAG_TOKEN", "")
-    if not token or request.headers.get("x-diag-token") != token:
-        raise HTTPException(404)
-    import time as _time
-    import numpy as np
-    import pandas as pd
-    rows = max(10, min(rows, 15000))
-    cols = max(1, min(cols, 75))
-    rng = np.random.default_rng(7)
-    data = {}
-    for index in range(cols):
-        kind = index % 5
-        if kind == 0:
-            data[f"Name {index}"] = ["Cairo", "cairo", "Alexandria", "Giza"] * (rows // 4) + ["Cairo"] * (rows % 4)
-        elif kind == 1:
-            data[f"Amount {index}"] = rng.integers(1, 100000, rows)
-        elif kind == 2:
-            data[f"Rate {index}"] = [f"{v:.0%}" if i % 3 else f"{v:.4f}" for i, v in enumerate(rng.random(rows))]
-        elif kind == 3:
-            data[f"Date {index}"] = ["15/05/1995", "03/07/2000", "2024-01-01", "N/A"] * (rows // 4) + ["15/05/1995"] * (rows % 4)
-        else:
-            data[f"Flag {index}"] = rng.choice(["Yes", "No", "TRUE", "1"], rows)
-    df = pd.DataFrame(data)
-    timings = {"rows": rows, "cols": cols, "cells": rows * cols}
-    started = _time.perf_counter()
-    report = profile_dataframe(df)
-    timings["profile_s"] = round(_time.perf_counter() - started, 2)
-    started = _time.perf_counter()
-    generate_cleaning_plan(df, report)
-    timings["plan_s"] = round(_time.perf_counter() - started, 2)
-    return timings
-
-
-@app.get("/api/diagnostics/background")
-def diagnostics_background(request: Request, background: BackgroundTasks):
-    token = os.getenv("DIAG_TOKEN", "")
-    if not token or request.headers.get("x-diag-token") != token:
-        raise HTTPException(404)
-    marker = Path("/home/ARSANY/dataneat-bg-marker.txt")
-
-    def work():
-        time.sleep(3)
-        marker.write_text(str(time.time()), encoding="utf-8")
-
-    background.add_task(work)
-    return {"scheduled": True}
-
-
-@app.get("/api/diagnostics/background-status")
-def diagnostics_background_status(request: Request):
-    token = os.getenv("DIAG_TOKEN", "")
-    if not token or request.headers.get("x-diag-token") != token:
-        raise HTTPException(404)
-    marker = Path("/home/ARSANY/dataneat-bg-marker.txt")
-    return {"finished": marker.exists(), "marker": marker.read_text(encoding="utf-8") if marker.exists() else None}
-
-
-@app.get("/api/diagnostics/tail")
-def diagnostics_tail(request: Request, lines: int = 200):
-    token = os.getenv("DIAG_TOKEN", "")
-    if not token or request.headers.get("x-diag-token") != token:
-        raise HTTPException(404)
-    path = os.getenv("ERROR_LOG", "/var/log/arsany.pythonanywhere.com.error.log")
-    try:
-        text = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
-    except Exception as exc:
-        return {"error": type(exc).__name__, "path": path}
-    keep = max(1, min(lines, 500))
-    return {"path": path, "lines": text[-keep:]}
+    return {"status": "ok", "max_upload_mb": MAX_UPLOAD // (1024 * 1024),
+            "max_rows": MAX_ROWS, "max_columns": MAX_COLUMNS}
 
 
 @app.get("/api/auth/config")
