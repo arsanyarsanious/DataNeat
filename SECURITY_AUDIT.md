@@ -298,7 +298,7 @@ No IDOR or missing owner check was found on the main web API routes reviewed.
 
 ### Now / P0
 
-1. **Done:** Keep the Excel public tunnel stopped. Add token auth and exact-origin CORS before any future remote Excel-web test.
+1. **Done (safe state):** public tunnel/companion stopped. Before any future remote Excel-web test, add per-launch token auth and exact-origin CORS; both are still pending and are tracked as P1 hardening.
 2. **Done:** Removed diagnostics endpoints, disk fields, `DIAG_TOKEN` and related `public_paths`; removed the token/log-path config; redeployed the live host and verified minimal health/OpenAPI.
 3. **Done:** Added a production `REQUIRE_AUTH` guard so missing Supabase configuration fails closed; live config enables it.
 
