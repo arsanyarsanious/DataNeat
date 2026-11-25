@@ -587,7 +587,7 @@ Validation: 678 backend tests passed on the integrated changes; 45 focused tests
 ## 44. Canonical agent handoff — November 24, 2026
 
 - `AGENT_BRIEF.md` is the complete current handoff: product, every feature, architecture, API map, tooling, security findings, deployment drift, unresolved backlog and exact start commands. Read it before continuing.
-- Key live/current caveat: GitHub `main` (`48f8020`) is ahead of the deployed PythonAnywhere build; the Excel add-in Tier L preview exists only as a local companion/manifest and is not deployed.
+- Key live/current caveat: GitHub `main` (security/P0 commits through `73d1249`) is ahead of the deployed PythonAnywhere build; only the P0 security patch was deployed live. The Excel add-in Tier L preview exists only as a local companion/manifest and is not deployed.
 - P0 cleanup completed 2026-11-25: diagnostics/disk fields and the live `DIAG_TOKEN`/`ERROR_LOG` were removed; the fail-closed `REQUIRE_AUTH` guard was added and the live minimal patch deployed. Full repo/live reconciliation and licensed-Excel highlight verification remain.
 - Excel web: the task pane loads and reaches the local engine. Office web's multipart upload caused “There was an error parsing the body”, so the task pane now uses `POST /api/addin/analyze-json` with `{csv, highlight_cap}`; multipart remains for desktop compatibility. JSON analysis was verified through the public tunnel.
 - Excel web Analyze then worked on a 5,555 × 36 sheet (31,823 issue cells). The first Highlight attempt hit Office’s request-payload limit, so fill application, original-fill backup, and clear/restore now batch 200 ranges per sync. Reopen the task pane and retest highlight/clear.
