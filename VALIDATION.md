@@ -308,3 +308,4 @@ Backend suite: **61 passed**, including full-column add/remove/no-change behavio
 - Added `POST /api/addin/analyze-json` and switched the task pane to JSON snapshots; multipart `/api/addin/analyze` retained. JSON analysis verified through the public tunnel and in Chromium; add-in tests now **4 passed** (multipart, JSON, cap, empty-file).
 - Web mode uses 1M-cell/5k-highlight limits and 5k-row batches. Final Excel-web Highlight/Clear verification pending.
 - Full backend suite remains **736 passed** after the CORS/JSON changes.
+- Excel web Analyze succeeded on a 5,555 × 36 sheet (31,823 issue cells). Highlight hit Office’s request-payload limit; original-fill backup, fill application, and clear/restore now run in 200-range batches with a sync per batch. Retest after reopening the add-in.

@@ -62,6 +62,10 @@ The web task pane sends the sheet snapshot as JSON
 web rejected the multipart request with “There was an error parsing the body”;
 the JSON path avoids that host quirk. The desktop multipart endpoint remains.
 
+Highlighting on Excel web is batched: original-fill backup, fill application,
+and clear/restore use 200 ranges per Office.js sync. This avoids Office’s
+request-payload limit on sheets with thousands of flagged cells.
+
 The web build detects Excel Online and uses smaller read batches, a 1,000,000
 cell limit and a 5,000 highlighted-cell cap. Desktop remains 3M cells / 10k
 highlights.
@@ -79,6 +83,9 @@ highlights.
 - If you see “There was an error parsing the body”, the task pane is stale:
   close and reopen the add-in (or reload the Excel tab) so it fetches the JSON
   task-pane code, then retry Analyze.
+- If you see “The request payload size has exceeded the limit”, the task pane
+  is stale (old one-sync highlighting). Close/reopen the add-in to load the
+  batched highlighter and retry.
 - If Excel web still blocks the tunnel, use a licensed desktop Excel or the
   browser mock (`/taskpane.html?mock=1`) to continue UI/engine testing.
 

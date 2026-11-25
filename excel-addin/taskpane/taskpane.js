@@ -6,6 +6,7 @@
   const HIGHLIGHT_CELL_LIMIT = 10000;
   const READ_CHUNK_ROWS = 15000;
   const TIER_L_CELLS = 3000000;
+  const FORMAT_BATCH = 200;
   const BACKUP_KEY = "dataneat.excel.highlightBackup";
   let highlightLimit = HIGHLIGHT_CELL_LIMIT;
   let chunkRows = READ_CHUNK_ROWS;
@@ -298,17 +299,19 @@
           const sheet = context.workbook.worksheets.getActiveWorksheet();
           sheet.load("name");
           const used = sheet.getUsedRange();
-          const proxies = runs.map((run) => {
-            const range = used.getCell(run.row, run.start).getResizedRange(0, run.length - 1);
-            range.load("address");
-            range.format.fill.load("color");
-            return range;
-          });
-          await context.sync();
-          backup = proxies.map((range) => ({
-            address: range.address.split("!").pop(),
-            color: range.format.fill.color || null,
-          }));
+          for (let start = 0; start < runs.length; start += FORMAT_BATCH) {
+            const batch = runs.slice(start, start + FORMAT_BATCH).map((run) => {
+              const range = used.getCell(run.row, run.start).getResizedRange(0, run.length - 1);
+              range.load("address");
+              range.format.fill.load("color");
+              return range;
+            });
+            await context.sync();
+            backup.push(...batch.map((range) => ({
+              address: range.address.split("!").pop(),
+              color: range.format.fill.color || null,
+            })));
+          }
           canRestore = saveBackup({ workbook, worksheet: sheet.name, created: new Date().toISOString(), items: backup });
         });
       } catch {
@@ -320,11 +323,14 @@
       await Excel.run(async (context) => {
         const sheet = context.workbook.worksheets.getActiveWorksheet();
         const used = sheet.getUsedRange();
-        for (const run of runs) {
-          const range = used.getCell(run.row, run.start).getResizedRange(0, run.length - 1);
-          range.format.fill.color = run.color;
+        for (let start = 0; start < runs.length; start += FORMAT_BATCH) {
+          for (const run of runs.slice(start, start + FORMAT_BATCH)) {
+            const range = used.getCell(run.row, run.start).getResizedRange(0, run.length - 1);
+            range.format.fill.color = run.color;
+          }
+          await context.sync();
+          setStatus(`Painting highlighted cells… ${Math.min(start + FORMAT_BATCH, runs.length).toLocaleString()} / ${runs.length.toLocaleString()} ranges`, "working");
         }
-        await context.sync();
       });
       setBusy(false);
       setStatus(
@@ -336,7 +342,12 @@
     } catch (error) {
       setBusy(false);
       const message = error.message || String(error);
-      if (/cannot perform the requested operation|AccessDenied/i.test(message)) {
+      if (/payload size|request payload|exceeded the limit/i.test(message)) {
+        setStatus(
+          "Excel web rejected the highlight payload. Retry after closing/reopening the add-in; if it persists, lower the highlight cap in the task pane.",
+          "error",
+        );
+      } else if (/cannot perform the requested operation|AccessDenied/i.test(message)) {
         setStatus(
           "Excel blocked the highlight write. Make sure the workbook is editable (not Protected View or read-only) and Excel is signed in and licensed, then retry.",
           "error",
@@ -359,12 +370,14 @@
     try {
       await Excel.run(async (context) => {
         const sheet = context.workbook.worksheets.getActiveWorksheet();
-        for (const item of backup.items) {
-          const range = sheet.getRange(item.address);
-          if (item.color) range.format.fill.color = item.color;
-          else range.format.fill.clear();
+        for (let start = 0; start < backup.items.length; start += FORMAT_BATCH) {
+          for (const item of backup.items.slice(start, start + FORMAT_BATCH)) {
+            const range = sheet.getRange(item.address);
+            if (item.color) range.format.fill.color = item.color;
+            else range.format.fill.clear();
+          }
+          await context.sync();
         }
-        await context.sync();
       });
       clearBackup();
       setBusy(false);

@@ -50,7 +50,7 @@ The app is intentionally more “careful data review” than “one-click magic�
 | Backend tests | **736 passed** (41 test files), last run after the add-in endpoint |
 | Frontend | TypeScript + `CLOUDFLARE_EXPORT=1` production build last passed after the history merge; Excel add-in has no frontend build step |
 | Excel add-in | Tier L **read-only preview** implemented locally. Real Excel task pane loads and analysis works; highlighting is implemented but was blocked on this machine by unlicensed Excel / Protected View. Not installed for other users yet. |
-| Excel on the web | Task pane loads in Excel web and reaches the local engine. Initial multipart upload failed in the Office host, so the task pane now uses `/api/addin/analyze-json`; JSON analysis is verified through the tunnel. A final in-Excel-web Analyze/Highlight retest is pending. |
+| Excel on the web | Analyze works in Excel web (sheet with 5,555 rows / 36 columns returned 31,823 issue cells). Highlight initially hit Office’s request-payload limit because thousands of ranges were sent in one sync; fill/backup/clear are now batched 200 ranges per sync. Retest highlight pending. |
 | Excel manifest | Validated with Microsoft’s `office-addin-manifest`; SourceLocation `https://localhost:9443/taskpane.html` |
 | Deployment status file | `C:\Users\Arsany Arsanious\Documents\Codex\outputs\dataneat-deployment\DEPLOYMENT_STATUS.md`; last entry says “Excel add-in proposal only”, so it is **stale** |
 | Local add-in companion | Can run on `https://localhost:9443`; certificate trusted for current Windows user; test Excel workbook exists in the workspace (not repo) |
@@ -345,6 +345,11 @@ These decisions are audit/undoable but excluded from transferable recipes.
     retained for desktop/compatibility. JSON analysis is verified through the
     public tunnel with Chromium and with a real Excel-web task pane request.
   - Final in-Excel-web highlight/clear verification is still pending.
+  - Excel web accepted Analyze on a 5,555-row × 36-column sheet (31,823 issue
+    cells), then rejected the first Highlight attempt with Office’s
+    “request payload size has exceeded the limit”. Fill application, original
+    fill backup, and clear/restore are now processed in **200-range batches**
+    with a sync after each batch. Reopen the task pane and retest.
   - See `docs/excel-addin-web.md`.
 
 ---
