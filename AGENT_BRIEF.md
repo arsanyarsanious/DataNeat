@@ -13,6 +13,10 @@ historical or stale statements; when they conflict, trust the code and this
 brief. `PROJECT_CONTEXT.md` has the long chronological record (§1–§43) and
 `docs/git-workflow.md` documents pushes.
 
+**Standing owner rule:** every change to the app must also update this brief and
+the relevant GitHub Markdown (`README.md`, `PROJECT_CONTEXT.md`, feature docs
+under `docs/`) in the same commit. Never leave the brief behind the code.
+
 ---
 
 ## 1. What DataNeat is
@@ -43,10 +47,10 @@ The app is intentionally more “careful data review” than “one-click magic�
 | Live limits | 5 MiB upload, 15,000 rows, 75 columns, 250,000-cell analysis budget, 300 MB snapshot budget, 200 stored records; 30 saved files / 40 MiB per account |
 | Live auth | Supabase enabled, Google sign-in enabled; public share routes only auth bypass |
 | Live deployment | **Behind GitHub main.** Last deployed web build was the premium UI + async upload + issue-menu work. The later 30-commit merge (outlier/distribution/imputation refinements, etc.) and the Excel add-in endpoint are **not deployed**. Health still exposes the temporary disk diagnostics. |
-| Backend tests | **735 passed** (41 test files), last run after the add-in endpoint |
+| Backend tests | **736 passed** (41 test files), last run after the add-in endpoint |
 | Frontend | TypeScript + `CLOUDFLARE_EXPORT=1` production build last passed after the history merge; Excel add-in has no frontend build step |
 | Excel add-in | Tier L **read-only preview** implemented locally. Real Excel task pane loads and analysis works; highlighting is implemented but was blocked on this machine by unlicensed Excel / Protected View. Not installed for other users yet. |
-| Excel on the web | Supported test path: local companion + temporary Cloudflare quick tunnel + generated manifest. Task pane/API analyzed successfully through the tunnel; actual Excel-web host still needs a signed-in Microsoft account test. |
+| Excel on the web | Task pane loads in Excel web and reaches the local engine. Initial multipart upload failed in the Office host, so the task pane now uses `/api/addin/analyze-json`; JSON analysis is verified through the tunnel. A final in-Excel-web Analyze/Highlight retest is pending. |
 | Excel manifest | Validated with Microsoft’s `office-addin-manifest`; SourceLocation `https://localhost:9443/taskpane.html` |
 | Deployment status file | `C:\Users\Arsany Arsanious\Documents\Codex\outputs\dataneat-deployment\DEPLOYMENT_STATUS.md`; last entry says “Excel add-in proposal only”, so it is **stale** |
 | Local add-in companion | Can run on `https://localhost:9443`; certificate trusted for current Windows user; test Excel workbook exists in the workspace (not repo) |
@@ -332,9 +336,16 @@ These decisions are audit/undoable but excluded from transferable recipes.
   `excel-addin/generated/manifest.web.xml`. Excel web can sideload that manifest
   without a desktop license. The URL changes per run and is gitignored. The
   companion allows `*.trycloudflare.com` origins via `CORS_ORIGIN_REGEX`; web
-  mode uses 5k-row batches, a 1M-cell cap and a 5k highlight cap. Task pane and
-  analysis were verified through the tunnel; the actual Excel-web host still
-  needs a signed-in Microsoft-account test. See `docs/excel-addin-web.md`.
+  mode uses 5k-row batches, a 1M-cell cap and a 5k highlight cap.
+  - The Excel-web task pane **loads** and its initial Analyze reached the
+    backend, but Office web's multipart `FormData` path produced FastAPI
+    “There was an error parsing the body”.
+  - The task pane now sends JSON to `POST /api/addin/analyze-json`
+    (`{csv, highlight_cap}`); the multipart `/api/addin/analyze` endpoint is
+    retained for desktop/compatibility. JSON analysis is verified through the
+    public tunnel with Chromium and with a real Excel-web task pane request.
+  - Final in-Excel-web highlight/clear verification is still pending.
+  - See `docs/excel-addin-web.md`.
 
 ---
 
@@ -428,7 +439,7 @@ Key routes:
 - account files `/api/account/files` through `account_files`
 - `/api/files/{id}/share` GET/POST/DELETE; public `/api/share/{token}`
 - `/api/assist`
-- `/api/addin/analyze`
+- `/api/addin/analyze` (multipart) and `/api/addin/analyze-json` (Excel-web path)
 - `/api/admin/usage` (admin only)
 - `/api/auth/me`, `/api/auth/sign-in-event`
 - temporary `/api/diagnostics/{tail,benchmark,background,background-status}`
@@ -625,7 +636,7 @@ $env:STORAGE_DIR = "$tmp\test-store"
 & "$venv\Scripts\python.exe" -m pytest "$project\backend\tests" -q `
   -p no:cacheprovider --basetemp="$tmp\pytest-run"
 ```
-Latest: **735 passed** (2 pre-existing deprecation warnings).
+Latest: **736 passed** (2 pre-existing deprecation warnings).
 
 ### 6.2 Frontend typecheck/build
 
@@ -727,13 +738,16 @@ last deploy**.
    - redeploy backend and verify.
 2. **Reconcile live with repo `main`**:
    - fetch/diff deployed source vs repo; deploy the merged backend/static after
-     running the 735 tests + frontend build + browser smoke;
+     running the 736 tests + frontend build + browser smoke;
    - update `DEPLOYMENT_STATUS.md` (it currently says add-in is only a plan).
-3. **Verify Excel highlighting on a licensed Excel**:
-   - sign in/license Excel; ensure workbook editable (not Protected View);
-   - `Analyze` → `Highlight issues`; confirm fills and `Clear highlights`
-     restore; if still AccessDenied, diagnose Office.js permissions/conditional
-     formatting/COM fallback.
+3. **Verify Excel highlighting on a licensed Excel**, and retest the new JSON
+   path in Excel web:
+   - In Excel web, close/reopen the add-in to pick up the updated task pane;
+   - Analyze, then try Highlight/Clear; report the exact error if it still
+     fails;
+   - On licensed desktop, test the same;
+   - if Office.js still returns AccessDenied, diagnose permissions/protected
+     mode/conditional formatting/COM fallback.
 4. **Decide whether to keep or remove the temporary add-in `.venv` junction**
    and how the preview will be packaged for the “few users” (installer or
    documented Python setup).
@@ -850,7 +864,7 @@ stable first.
 | Bundled Python 3.12 venv (`dnvenv`) | backend runs/tests; project has no committed venv |
 | Node.js 24 + pnpm 11 (bundled paths) | frontend install/typecheck/build; **no npm in bundle** |
 | Next.js 16 / React 19 / TypeScript | frontend |
-| pytest 9 | 41 backend test files, 735 tests |
+| pytest 9 | 41 backend test files, 736 tests |
 | Playwright 1.64 + Chromium | browser QA against local and live builds |
 | httpx / requests | API probes and deployment tests |
 | PythonAnywhere API | file upload, static upload, reload; token in private folder |
@@ -914,7 +928,7 @@ Known environment quirks:
 | Live | https://arsany.pythonanywhere.com/ |
 | Local project | `C:\Users\Arsany Arsanious\Desktop\DataNeat-Portable` |
 | Backend venv | `C:\Users\Arsany Arsanious\Documents\deepseek-harness\default-workspace\dnvenv` |
-| Backend tests | 735 passed |
+| Backend tests | 736 passed |
 | API health (live) | `/api/health` returns caps + disk diagnostics |
 | Excel task pane | `https://localhost:9443/taskpane.html` |
 | Excel manifest | `excel-addin/manifest.xml` |

@@ -1,5 +1,7 @@
 # DataNeat
 
+> **Maintenance rule:** every app change must also update [AGENT_BRIEF.md](AGENT_BRIEF.md), this README when relevant, and the relevant files under `docs/`, in the same commit.
+
 > **Agent handoff:** read [AGENT_BRIEF.md](AGENT_BRIEF.md) first for the complete current architecture, feature inventory, security findings and unfinished work.
 
 > **Current project context (21 October 2026):** see [PROJECT_CONTEXT.md](PROJECT_CONTEXT.md) for the complete verified AI handoff. Some historical sections below still describe retired Advanced screens or older preparation behavior. Current source and PROJECT_CONTEXT.md take precedence; do not initialize the current UI through the legacy editor startup route.

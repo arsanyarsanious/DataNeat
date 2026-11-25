@@ -130,10 +130,13 @@
   }
 
   async function postAnalysis(csv, filename = "excel-sheet.csv") {
-    const form = new FormData();
-    form.append("file", new Blob([csv], { type: "text/csv" }), filename);
-    form.append("highlight_cap", String(highlightLimit));
-    const response = await fetch("/api/addin/analyze", { method: "POST", body: form });
+    // JSON is used instead of multipart: Excel on the web's task-pane fetch can
+    // fail multipart body parsing through the Office host/tunnel.
+    const response = await fetch("/api/addin/analyze-json", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ csv, highlight_cap: highlightLimit }),
+    });
     const text = await response.text();
     let body;
     try { body = JSON.parse(text); } catch { body = null; }

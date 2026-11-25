@@ -47,6 +47,20 @@ def test_addin_analyze_caps_highlight_cells_but_keeps_total():
     assert body["truncated"] is True
 
 
+def test_addin_analyze_json_accepts_excel_web_snapshot():
+    client = TestClient(app)
+    response = client.post(
+        "/api/addin/analyze-json",
+        json={"csv": _csv().decode(), "highlight_cap": 100},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["rows"] == 4
+    assert body["columns_count"] == 6
+    assert body["cells"]
+    assert body["total_issue_cells"] > 0
+
+
 def test_addin_analyze_rejects_empty_file():
     client = TestClient(app)
     response = client.post(

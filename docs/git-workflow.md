@@ -37,6 +37,11 @@ git commit -m "Clear, scoped description of the change"
 git push origin main
 ```
 
+**Documentation rule:** every app change must update `AGENT_BRIEF.md` plus the
+relevant Markdown (`README.md`, `PROJECT_CONTEXT.md`, feature docs under
+`docs/`) in the same commit. The brief is the canonical handoff; do not let it
+fall behind the code.
+
 Use a short-lived branch and a pull request for risky or collaborative work.
 Deployment is separate from committing: the hosted build is uploaded only after
 the local build and browser checks pass.

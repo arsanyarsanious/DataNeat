@@ -57,6 +57,11 @@ Keep both windows open. The tunnel URL changes every run.
 - Review the metrics and per-column findings.
 - Click **Highlight issues**; then **Clear highlights**.
 
+The web task pane sends the sheet snapshot as JSON
+(`POST /api/addin/analyze-json`) rather than multipart FormData. Excel on the
+web rejected the multipart request with “There was an error parsing the body”;
+the JSON path avoids that host quirk. The desktop multipart endpoint remains.
+
 The web build detects Excel Online and uses smaller read batches, a 1,000,000
 cell limit and a 5,000 highlighted-cell cap. Desktop remains 3M cells / 10k
 highlights.
@@ -71,6 +76,9 @@ highlights.
   still open and the URL from its output matches the generated manifest.
 - If the add-in loads but the task pane is blank, open the public task-pane URL
   directly; the tunnel may have expired.
+- If you see “There was an error parsing the body”, the task pane is stale:
+  close and reopen the add-in (or reload the Excel tab) so it fetches the JSON
+  task-pane code, then retry Analyze.
 - If Excel web still blocks the tunnel, use a licensed desktop Excel or the
   browser mock (`/taskpane.html?mock=1`) to continue UI/engine testing.
 

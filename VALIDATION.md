@@ -299,4 +299,12 @@ Backend suite: **61 passed**, including full-column add/remove/no-change behavio
 - Added `excel-addin/`: local HTTPS companion, Office.js task pane, validated sideload manifest, certificate/setup scripts, bundled Inter font and README. Backend adds read-only `POST /api/addin/analyze` returning column summaries and compact per-cell issue markers.
 - Real Excel 365 desktop test: task pane loaded from `https://localhost:9443`, analyzed a test sheet and returned 17 flagged cells across 6 columns; manifest validated with Microsoft's validator.
 - The test machine's Excel is unlicensed, so Office.js formatting returned AccessDenied (“You cannot perform the requested operation”). Analysis works; highlighting requires a licensed/signed-in Excel and an editable workbook (Enable Editing). The task pane now explains this instead of failing silently.
-- Added tests for the add-in analysis endpoint and cap/truncation. Full backend suite: **735 passed**. Add-in code committed and pushed to GitHub.
+- Added tests for the add-in analysis endpoint and cap/truncation. Full backend suite: **736 passed**. Add-in code committed and pushed to GitHub.
+
+## November 25, 2026 — Excel web path and JSON analyzer
+
+- Added a temporary Cloudflare quick-tunnel helper and generated-manifest flow for Excel on the web (`web-tunnel.ps1`, `docs/excel-addin-web.md`). Companion CORS allows `*.trycloudflare.com` for that test.
+- Excel-web task pane loaded and reached the backend; Office web multipart parsing failed with “There was an error parsing the body”.
+- Added `POST /api/addin/analyze-json` and switched the task pane to JSON snapshots; multipart `/api/addin/analyze` retained. JSON analysis verified through the public tunnel and in Chromium; add-in tests now **4 passed** (multipart, JSON, cap, empty-file).
+- Web mode uses 1M-cell/5k-highlight limits and 5k-row batches. Final Excel-web Highlight/Clear verification pending.
+- Full backend suite remains **736 passed** after the CORS/JSON changes.
