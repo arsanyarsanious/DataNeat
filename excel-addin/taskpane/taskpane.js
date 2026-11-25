@@ -7,6 +7,9 @@
   const READ_CHUNK_ROWS = 15000;
   const TIER_L_CELLS = 3000000;
   const BACKUP_KEY = "dataneat.excel.highlightBackup";
+  let highlightLimit = HIGHLIGHT_CELL_LIMIT;
+  let chunkRows = READ_CHUNK_ROWS;
+  let tierCellLimit = TIER_L_CELLS;
 
   const ISSUE_LABELS = {
     missing: "Missing", missing_marker: "Missing labels", whitespace: "Whitespace",
@@ -99,14 +102,14 @@
     issues.hidden = false;
 
     const truncated = $("truncated");
-    const shown = Math.min(analysis.cells.length, HIGHLIGHT_CELL_LIMIT);
-    if (analysis.truncated || analysis.cells.length > HIGHLIGHT_CELL_LIMIT) {
+    const shown = Math.min(analysis.cells.length, highlightLimit);
+    if (analysis.truncated || analysis.cells.length > highlightLimit) {
       truncated.hidden = false;
       truncated.textContent = `Showing the first ${shown.toLocaleString()} flagged cells of ${analysis.total_issue_cells.toLocaleString()}. Column totals are complete.`;
     } else {
       truncated.hidden = true;
     }
-    $("capNote").textContent = `This preview highlights up to ${HIGHLIGHT_CELL_LIMIT.toLocaleString()} cells per run. Tier L supports up to ${TIER_L_CELLS.toLocaleString()} cells.`;
+    $("capNote").textContent = `This preview highlights up to ${highlightLimit.toLocaleString()} cells per run. Supported sheet size is up to ${tierCellLimit.toLocaleString()} cells.`;
 
     const sorted = [...analysis.columns].sort((a, b) => issueTotal(b) - issueTotal(a));
     const withIssues = sorted.filter((column) => issueTotal(column) > 0);
@@ -129,7 +132,7 @@
   async function postAnalysis(csv, filename = "excel-sheet.csv") {
     const form = new FormData();
     form.append("file", new Blob([csv], { type: "text/csv" }), filename);
-    form.append("highlight_cap", String(HIGHLIGHT_CELL_LIMIT));
+    form.append("highlight_cap", String(highlightLimit));
     const response = await fetch("/api/addin/analyze", { method: "POST", body: form });
     const text = await response.text();
     let body;
@@ -167,13 +170,13 @@
       const rows = used.rowCount;
       const columns = used.columnCount;
       if (!rows || !columns) throw new Error("The active sheet has no used range.");
-      if (rows * columns > TIER_L_CELLS) {
-        throw new Error(`This sheet has ${ (rows * columns).toLocaleString() } cells. Tier L supports up to ${TIER_L_CELLS.toLocaleString()}; select a smaller range or split the sheet.`);
+      if (rows * columns > tierCellLimit) {
+        throw new Error(`This sheet has ${ (rows * columns).toLocaleString() } cells. This mode supports up to ${tierCellLimit.toLocaleString()}; select a smaller range or split the sheet.`);
       }
 
       const data = [];
-      for (let start = 0; start < rows; start += READ_CHUNK_ROWS) {
-        const count = Math.min(READ_CHUNK_ROWS, rows - start);
+      for (let start = 0; start < rows; start += chunkRows) {
+        const count = Math.min(chunkRows, rows - start);
         setStatus(`Reading rows ${(start + 1).toLocaleString()}–${(start + count).toLocaleString()} of ${rows.toLocaleString()}…`, "working");
         const range = used.getCell(start, 0).getResizedRange(count - 1, columns - 1);
         range.load("text");
@@ -277,7 +280,7 @@
 
   async function highlightIssues() {
     if (!state?.analysis || state.mock) return;
-    const cells = state.analysis.cells.slice(0, HIGHLIGHT_CELL_LIMIT);
+    const cells = state.analysis.cells.slice(0, highlightLimit);
     if (!cells.length) { setStatus("No flagged cells to highlight.", ""); return; }
     setBusy(true);
     setStatus(`Painting ${cells.length.toLocaleString()} highlighted cells…`, "working");
@@ -382,6 +385,14 @@
   } else if (typeof Office !== "undefined") {
     Office.onReady((info) => {
       if (info.host === Office.HostType.Excel) {
+        if (info.platform === Office.PlatformType.OfficeOnline) {
+          // Excel on the web has tighter range/payload limits and slower
+          // formatting; use smaller batches and a lower interactive cap.
+          chunkRows = 5000;
+          tierCellLimit = 1000000;
+          highlightLimit = 5000;
+          $("capNote").textContent = "Excel on the web mode: up to 1,000,000 cells, highlighting up to 5,000 flagged cells per run.";
+        }
         bind();
         setStatus("Ready. Make sure the sheet has headers, then analyze.");
       } else {

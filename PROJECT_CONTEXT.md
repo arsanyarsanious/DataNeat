@@ -582,6 +582,7 @@ Validation: 678 backend tests passed on the integrated changes; 45 focused tests
 - Verified in real Excel 365 desktop: task pane loads, analysis runs and returns 17 flagged cells for the test sheet. Highlight writes were refused by this machine's **unlicensed Excel** (Office.js AccessDenied); COM writes work, so the block is the Office license/Protected View, not the analyzer. On licensed Excel, retry after **Enable Editing**. The preview reports a clear write-blocked message.
 - Backend: `/api/addin/analyze` plus `backend/tests/test_addin.py`; full suite **735 passed**. Manifest validates with `office-addin-manifest`.
 - Remaining Phase 1 work: verify formatting on a licensed Excel, tuning for 1–3M cells, then corrections/automatic cleaning (Phase 2).
+- Added an Excel-on-the-web test path: `companion/web-tunnel.ps1` opens a temporary Cloudflare quick tunnel and generates `generated/manifest.web.xml`; the companion allows `*.trycloudflare.com` origins for that test. Web mode uses 1M cells / 5k highlight cap. Browser/tunnel analysis verified; actual Excel-web host test still needs a Microsoft account.
 
 ## 44. Canonical agent handoff — November 24, 2026
 

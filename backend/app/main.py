@@ -3,6 +3,7 @@ import hashlib
 import logging
 import io
 import os
+import re
 import threading
 import time
 import uuid
@@ -73,6 +74,7 @@ analysis_lock = threading.Lock()
 analysis_running: set[str] = set()
 rate = defaultdict(deque)
 ALLOWED_ORIGINS = [value.rstrip("/") for value in os.getenv("CORS_ORIGINS", "http://localhost:3000").split(",") if value]
+ALLOWED_ORIGIN_REGEX = os.getenv("CORS_ORIGIN_REGEX", "").strip() or None
 if os.getenv("RENDER_EXTERNAL_URL"):
     ALLOWED_ORIGINS.append(os.environ["RENDER_EXTERNAL_URL"].rstrip("/"))
 
@@ -101,6 +103,7 @@ app = FastAPI(title="DataNeat API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS,
+    allow_origin_regex=ALLOWED_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type"],
@@ -116,10 +119,13 @@ async def session_and_limits(request: Request, call_next):
         response.headers["X-Content-Type-Options"] = "nosniff"
         return response
     origin = request.headers.get("origin")
+    origin_allowed = origin in ALLOWED_ORIGINS if origin else True
+    if origin and ALLOWED_ORIGIN_REGEX and not origin_allowed:
+        origin_allowed = re.fullmatch(ALLOWED_ORIGIN_REGEX, origin) is not None
     if (
         request.method in ("POST", "DELETE")
         and origin
-        and origin not in ALLOWED_ORIGINS
+        and not origin_allowed
     ):
         return JSONResponse({"detail": "Origin not allowed"}, status_code=403)
     session = request.cookies.get("dataneat_session")

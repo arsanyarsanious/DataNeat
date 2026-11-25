@@ -56,6 +56,23 @@ If Excel opens the workbook in **Protected View** or as read-only, click
 analysis may work while highlighting is refused. A licensed/signed-in Excel is
 required for Office.js formatting on some installations.
 
+### Excel on the web
+
+Excel on the web can sideload the add-in, but browsers may block it from loading
+a localhost task pane. Use the temporary tunnel helper:
+
+```powershell
+# window 1
+.\companion\run.ps1
+# window 2
+.\companion\web-tunnel.ps1
+```
+
+Then upload `generated/manifest.web.xml` in Excel web. See
+[../docs/excel-addin-web.md](../docs/excel-addin-web.md) for the full steps,
+limits and security warnings. The web mode uses smaller batches (1M cells,
+5,000 highlighted cells).
+
 ## 4. Use it
 
 1. Open a worksheet whose first row contains column names.

@@ -34,3 +34,6 @@ credentials*.json
 frontend/out/
 .wrangler/
 .dev.vars
+
+# Generated Excel-add-in tunnel manifests (temporary public URLs)
+excel-addin/generated/

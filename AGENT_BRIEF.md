@@ -1,7 +1,7 @@
 # DataNeat — Complete Agent Handoff Brief
 
 **Snapshot:** 2026-11-24, ~20:35 Africa/Cairo
-**Repository:** https://github.com/arsanyarsanious/DataNeat — `main` at `48f8020`
+**Repository:** https://github.com/arsanyarsanious/DataNeat — `main` (check `git log` for the latest commit; this brief was authored around `67ebc04`)
 **Working copy:** `C:\Users\Arsany Arsanious\Desktop\DataNeat-Portable`
 **Public app:** https://arsany.pythonanywhere.com/
 **Product owner:** Arsany Arsanious (`arsanyarsanious@gmail.com`); communicates in
@@ -46,6 +46,7 @@ The app is intentionally more “careful data review” than “one-click magic�
 | Backend tests | **735 passed** (41 test files), last run after the add-in endpoint |
 | Frontend | TypeScript + `CLOUDFLARE_EXPORT=1` production build last passed after the history merge; Excel add-in has no frontend build step |
 | Excel add-in | Tier L **read-only preview** implemented locally. Real Excel task pane loads and analysis works; highlighting is implemented but was blocked on this machine by unlicensed Excel / Protected View. Not installed for other users yet. |
+| Excel on the web | Supported test path: local companion + temporary Cloudflare quick tunnel + generated manifest. Task pane/API analyzed successfully through the tunnel; actual Excel-web host still needs a signed-in Microsoft account test. |
 | Excel manifest | Validated with Microsoft’s `office-addin-manifest`; SourceLocation `https://localhost:9443/taskpane.html` |
 | Deployment status file | `C:\Users\Arsany Arsanious\Documents\Codex\outputs\dataneat-deployment\DEPLOYMENT_STATUS.md`; last entry says “Excel add-in proposal only”, so it is **stale** |
 | Local add-in companion | Can run on `https://localhost:9443`; certificate trusted for current Windows user; test Excel workbook exists in the workspace (not repo) |
@@ -326,6 +327,14 @@ These decisions are audit/undoable but excluded from transferable recipes.
 - Not deployed as an installer or packaged app. It relies on Python and a
   locally trusted cert. No automatic cleaning/corrections yet. Tier XL
   (10M cells) is only a plan.
+- **Excel on the web testing path:** `companion/web-tunnel.ps1` starts a
+  temporary Cloudflare quick tunnel to the local companion and generates
+  `excel-addin/generated/manifest.web.xml`. Excel web can sideload that manifest
+  without a desktop license. The URL changes per run and is gitignored. The
+  companion allows `*.trycloudflare.com` origins via `CORS_ORIGIN_REGEX`; web
+  mode uses 5k-row batches, a 1M-cell cap and a 5k highlight cap. Task pane and
+  analysis were verified through the tunnel; the actual Excel-web host still
+  needs a signed-in Microsoft-account test. See `docs/excel-addin-web.md`.
 
 ---
 
@@ -541,6 +550,10 @@ at the localhost task pane. No cloud data path exists in this preview.
   analysis/upload. Threat is local-only, but should be hardened with an
   add-in token, Origin check, and perhaps per-launch secret.
 - Task pane has `ReadWriteDocument`; it can edit the workbook (intended).
+- The web-tunnel path exposes the unauthenticated local companion through a
+  temporary public `*.trycloudflare.com` URL. The CORS regex allows any
+  trycloudflare subdomain, not only the current tunnel. Treat it as a temporary
+  test channel only; stop it after use and do not send confidential data.
 - `saveBackup` of original fills uses Office document settings (size-limited);
   large backups fall back to localStorage or fail restore.
 - Certificate is generated as a self-signed CA (`BasicConstraints CA=true`);
@@ -659,6 +672,21 @@ cd 'C:\Users\Arsany Arsanious\Desktop\DataNeat-Portable\excel-addin'
 On this machine only Python 3.13 is installed; `.venv` is currently a junction
 to the harness Python 3.12 venv (ignored by git). Do not rely on that for
 portable packaging.
+
+### 6.4.1 Excel on the web
+
+```powershell
+# window 1
+cd 'C:\Users\Arsany Arsanious\Desktop\DataNeat-Portable\excel-addin'
+.\companion\run.ps1
+# window 2
+.\companion\web-tunnel.ps1
+# Excel web: Home > Add-ins > More Settings > Upload My Add-in
+# select generated/manifest.web.xml
+```
+The helper prints the temporary public task-pane URL and manifest path. See
+`docs/excel-addin-web.md`. It has only been verified through browser/tunnel;
+the Excel-web host still needs a signed-in Microsoft account.
 
 ### 6.5 GitHub
 

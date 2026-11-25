@@ -37,6 +37,9 @@ $env:ANALYSIS_SYNC_CELLS = "0"
 $env:AI_ASSIST_ENABLED = "false"
 $env:COOKIE_SECURE = "false"
 $env:CORS_ORIGINS = "https://localhost:9443"
+# The web-tunnel helper serves the same task pane from a temporary
+# *.trycloudflare.com origin; allow only that host pattern, not arbitrary sites.
+$env:CORS_ORIGIN_REGEX = "https://([a-z0-9-]+\.)?trycloudflare\.com"
 # The local companion is single-user on localhost; do not inherit hosted auth.
 $env:SUPABASE_URL = ""
 $env:SUPABASE_PUBLISHABLE_KEY = ""
