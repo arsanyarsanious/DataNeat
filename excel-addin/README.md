@@ -36,19 +36,27 @@ certificate and trusts it for your Windows user.
 
 Leave the window open. It serves:
 
-- task pane: `https://localhost:9443/taskpane.html`
-- local API: `https://localhost:9443/api/...`
+- task pane: `https://localhost:9443/taskpane.html?token=...`
+- local API: `https://localhost:9443/api/...` (requires the `X-Addin-Token` header)
 
-You can test the interface in a browser first:
+The companion generates a persistent access token in
+`generated/addin-token.txt` and a matching
+`generated/manifest.local.xml`. The token protects the analysis API; deleting
+the token file and restarting rotates it.
 
-`https://localhost:9443/taskpane.html?mock=1`
+You can test the interface in a browser using the tokenized URL printed by the
+companion (or append `?token=` from the generated manifest). Mock mode only
+skips Excel integration, not the token check:
+
+`https://localhost:9443/taskpane.html?mock=1&token=...`
 
 ## 3. Sideload the add-in in Excel
 
 1. Open Excel desktop.
 2. **Insert → Get Add-ins → My Add-ins → Upload My Add-in** (the exact path
    varies slightly by Excel version).
-3. Choose `excel-addin/manifest.xml`.
+3. Choose **`excel-addin/generated/manifest.local.xml`**, not the base
+   `manifest.xml`; the generated manifest carries the current access token.
 4. In the **Home** ribbon, open the **DataNeat** add-in/task pane.
 
 If Excel opens the workbook in **Protected View** or as read-only, click
@@ -68,7 +76,8 @@ a localhost task pane. Use the temporary tunnel helper:
 .\companion\web-tunnel.ps1
 ```
 
-Then upload `generated/manifest.web.xml` in Excel web. See
+Then upload `generated/manifest.web.xml` in Excel web. The web manifest contains
+the same tokenized task-pane URL. See
 [../docs/excel-addin-web.md](../docs/excel-addin-web.md) for the full steps,
 limits and security warnings. The web mode uses smaller batches (1M cells,
 5,000 highlighted cells).
@@ -102,7 +111,9 @@ does write cell fill colors for highlighting.
 
 ## Files
 
-- `manifest.xml` — sideload manifest
+- `manifest.xml` — base sideload manifest (use the generated tokenized manifest for runtime)
+- `generated/manifest.local.xml` — local manifest with the current token
+- `generated/addin-token.txt` — local access token; rotate by deleting and restarting
 - `taskpane/` — Office.js task pane
 - `companion/run.ps1` — starts the HTTPS local engine
 - `companion/certs.py` — localhost certificate generation/trust

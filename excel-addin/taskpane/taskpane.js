@@ -3,6 +3,7 @@
   "use strict";
 
   const isMock = new URLSearchParams(location.search).has("mock");
+  const addinToken = new URLSearchParams(location.search).get("token") || "";
   const HIGHLIGHT_CELL_LIMIT = 10000;
   const READ_CHUNK_ROWS = 15000;
   const TIER_L_CELLS = 3000000;
@@ -135,7 +136,9 @@
     // fail multipart body parsing through the Office host/tunnel.
     const response = await fetch("/api/addin/analyze-json", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: addinToken
+        ? { "Content-Type": "application/json", "X-Addin-Token": addinToken }
+        : { "Content-Type": "application/json" },
       body: JSON.stringify({ csv, highlight_cap: highlightLimit }),
     });
     const text = await response.text();
@@ -342,7 +345,12 @@
     } catch (error) {
       setBusy(false);
       const message = error.message || String(error);
-      if (/payload size|request payload|exceeded the limit/i.test(message)) {
+      if (/Add-in access token|401/i.test(message)) {
+        setStatus(
+          "This task pane is missing its launch token. Close it and reopen the add-in from the current generated manifest, then retry.",
+          "error",
+        );
+      } else if (/payload size|request payload|exceeded the limit/i.test(message)) {
         setStatus(
           "Excel web rejected the highlight payload. Retry after closing/reopening the add-in; if it persists, lower the highlight cap in the task pane.",
           "error",

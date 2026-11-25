@@ -15,6 +15,36 @@ def _csv():
     ).encode()
 
 
+def test_addin_requires_its_launch_token_when_configured(monkeypatch):
+    monkeypatch.setenv("ADDIN_TOKEN", "test-addin-token")
+    client = TestClient(app)
+    payload = {"csv": _csv().decode(), "highlight_cap": 100}
+    assert client.post("/api/addin/analyze-json", json=payload).status_code == 401
+    assert client.post(
+        "/api/addin/analyze-json",
+        json=payload,
+        headers={"X-Addin-Token": "wrong-token"},
+    ).status_code == 401
+    allowed = client.post(
+        "/api/addin/analyze-json",
+        json=payload,
+        headers={"X-Addin-Token": "test-addin-token"},
+    )
+    assert allowed.status_code == 200, allowed.text
+    assert allowed.json()["rows"] == 4
+    assert client.get("/api/health").status_code == 200
+
+
+def test_same_origin_tunnel_style_request_is_not_rejected_by_cors():
+    client = TestClient(app)
+    response = client.post(
+        "/api/files/upload",
+        headers={"Origin": "https://testserver"},
+        files={"file": ("origin.csv", b"A\nx\n", "text/csv")},
+    )
+    assert response.status_code == 200, response.text
+
+
 def test_addin_analyze_returns_compact_issue_map():
     client = TestClient(app)
     response = client.post(

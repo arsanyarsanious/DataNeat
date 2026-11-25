@@ -314,13 +314,21 @@ Backend suite: **61 passed**, including full-column add/remove/no-change behavio
 
 - Removed `/api/diagnostics/*`, disk fields from `/api/health`, and diagnostics entries from `public_paths`; changed health to status/limits only.
 - Added `REQUIRE_AUTH`: when true, non-public APIs return 503 if Supabase URL/key are absent. Read-only share links and health/config stay available. Added three tests for fail-closed behavior, configured-auth rejection, and diagnostics removal.
-- Full backend suite: **739 passed**.
+- Full backend suite: **741 passed**.
 - Removed `DIAG_TOKEN` and `ERROR_LOG` from the live PythonAnywhere config, set `REQUIRE_AUTH=true` (string, required because the launcher copies values into `os.environ`), deployed a minimal P0 patch of the live `main.py`, reloaded and verified:
   - live `/api/health` returns only `{status, max_upload_mb, max_rows, max_columns}`;
   - `/openapi.json` has no diagnostics paths;
   - protected requests without a session return 401;
   - invalid share tokens still return 404.
 - The full merged repo backend is still not deployed; only the security P0 patch was applied live.
+
+## November 25, 2026 — Companion token and same-origin CORS
+
+- `run.ps1` now generates/persists a 32-byte `ADDIN_TOKEN`, writes `generated/addin-token.txt`, and emits `generated/manifest.local.xml` with a tokenized task-pane URL. `web-tunnel.ps1` embeds the same token in `generated/manifest.web.xml`.
+- Task pane sends `X-Addin-Token`; missing/wrong tokens return 401. The broad `*.trycloudflare.com` CORS regex was removed; same-origin Tunnel requests are allowed by matching the Origin host to the request Host.
+- Verified locally: no-token Analyze 401, token Analyze 200; tokenized tunnel HTTP and Chromium Analyze passed; both generated manifests validate.
+- Full backend suite: **741 passed**.
+- Current tokenized tunnel is temporary; stop it after testing. Existing sideload credentials must be replaced with the generated manifests.
 
 ## November 25, 2026 — Security review
 

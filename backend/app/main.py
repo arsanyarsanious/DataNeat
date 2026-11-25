@@ -1,5 +1,6 @@
 import asyncio
 import hashlib
+import hmac
 import logging
 import io
 import os
@@ -7,6 +8,7 @@ import re
 import threading
 import time
 import uuid
+from urllib.parse import urlsplit
 from collections import defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
@@ -106,7 +108,7 @@ app.add_middleware(
     allow_origin_regex=ALLOWED_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE"],
-    allow_headers=["Content-Type"],
+    allow_headers=["Content-Type", "X-Addin-Token"],
 )
 
 app.add_middleware(BodyLimitMiddleware, max_bytes=MAX_UPLOAD + 1024 * 1024)
@@ -122,6 +124,16 @@ async def session_and_limits(request: Request, call_next):
     origin_allowed = origin in ALLOWED_ORIGINS if origin else True
     if origin and ALLOWED_ORIGIN_REGEX and not origin_allowed:
         origin_allowed = re.fullmatch(ALLOWED_ORIGIN_REGEX, origin) is not None
+    if origin and not origin_allowed:
+        # The Excel-web tunnel serves the task pane and API from one origin.
+        # Allow a same-origin request even though the tunnel hostname is
+        # generated after the companion starts, without allowing any other site.
+        try:
+            origin_allowed = bool(request.headers.get("host")) and (
+                urlsplit(origin).netloc.lower() == request.headers["host"].lower()
+            )
+        except (ValueError, TypeError):
+            origin_allowed = False
     if (
         request.method in ("POST", "DELETE")
         and origin
@@ -137,6 +149,17 @@ async def session_and_limits(request: Request, call_next):
     request.state.user = None
     path = request.url.path
     public_paths = {"/api/health", "/api/auth/config", "/api/auth/session", "/api/auth/logout"}
+    addin_token = os.getenv("ADDIN_TOKEN", "")
+    if (
+        addin_token
+        and path.startswith("/api/addin/")
+        and request.method != "OPTIONS"
+        and not hmac.compare_digest(request.headers.get("x-addin-token", ""), addin_token)
+    ):
+        return JSONResponse(
+            {"detail": "Add-in access token is missing or invalid."},
+            status_code=401,
+        )
     auth_config = identity.configuration()
     auth_ready = bool(auth_config.get("enabled") and auth_config.get("url") and auth_config.get("publishable_key"))
     if (

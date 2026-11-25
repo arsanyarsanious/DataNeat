@@ -9,7 +9,7 @@
 
 The main web application has a sound authorization model: all file/job/workflow reads are scoped through a server-side session or account owner, share tokens are HMAC-signed and read-only, uploads are not treated as pickles, and requests without a valid session were rejected in the tested production configuration.
 
-The highest-risk issue is not in the hosted web app: **the Excel-on-the-web test path exposed an unauthenticated local companion through a public Cloudflare quick tunnel, with a broad `*.trycloudflare.com` CORS allow-list.** That path was for temporary testing and has now been stopped, but it must not be used again without an access token or Cloudflare Access in front of it.
+The highest-risk issue is not in the hosted web app: **the Excel-on-the-web test path initially exposed an unauthenticated local companion through a public Cloudflare quick tunnel, with a broad `*.trycloudflare.com` CORS allow-list.** The companion now requires a persistent per-installation add-in token on `/api/addin/*`, the broad CORS regex was replaced by a same-origin check, and the tokenized tunnel path was verified end-to-end. The tunnel remains a temporary testing channel and must be stopped when not in use.
 
 The second issue was **temporary diagnostics in production**. They have now been removed from the repository and the live configuration, and `/api/health` no longer exposes disk capacity. The fail-closed `REQUIRE_AUTH` guard is implemented and enabled live; see the P0 verification section.
 
@@ -19,7 +19,7 @@ No real server-side API keys were found in tracked files or the current worktree
 
 | ID | Severity | Area | Finding |
 |---|---|---|---|
-| SEC-1 | **High** — mitigated for now | Excel companion | Public quick tunnel exposed an unauthenticated local API; broad CORS regex |
+| SEC-1 | **High** — mitigated 2026-11-25 | Excel companion | Public quick tunnel exposed an unauthenticated local API; broad CORS regex |
 | SEC-2 | **High** — fixed 2026-11-25 | Diagnostics | Temporary diagnostics, log tail, CPU benchmark and disk fields were still in production code/config |
 | SEC-3 | **Medium** — mitigated 2026-11-25 | Authentication | Authentication fails open when Supabase env is absent; public deployments can silently become anonymous |
 | SEC-4 | **Medium** | Availability | Per-IP in-memory rate limiting, unbounded rate map, single worker, CPU/zip-expansion DoS |
@@ -31,17 +31,23 @@ No real server-side API keys were found in tracked files or the current worktree
 | SEC-10 | **Low** | Information exposure | Public `/docs`, `/openapi.json`, `/api/health` disk details; no secrets but useful reconnaissance |
 | SEC-11 | **Info** | Dependencies | No automated CVE audit was completed; versions are pinned but not verified against an advisory database |
 
-### SEC-1 — Public unauthenticated Excel companion (High)
+### SEC-1 — Public Excel companion (High)
 
-**Status:** Mitigated for now — the tunnel and companion were stopped on
-2026-11-25. Companion token auth and exact-origin CORS are still required before
-any future remote Excel-web test.
+**Status:** Mitigated 2026-11-25. `run.ps1` now generates/persists a 32-byte
+add-in token and writes a tokenized local manifest. `web-tunnel.ps1` embeds the
+token in the generated web manifest; the task pane sends it as `X-Addin-Token`.
+The API rejects missing/wrong tokens with 401, and the broad trycloudflare CORS
+regex was removed in favor of a same-origin Host/Origin check. The tokenized
+tunnel path and browser Analyze flow were verified. The tunnel is still
+temporary; stop it when done and do not share generated manifests.
+
+Historical description follows.
 
 **Affected files**
 
 - `excel-addin/companion/run.ps1`
 - `excel-addin/companion/web-tunnel.ps1`
-- `backend/app/main.py` (`CORS_ORIGIN_REGEX`, auth middleware)
+- `backend/app/main.py` (optional `ADDIN_TOKEN` enforcement; same-origin Host/Origin check; historical broad CORS regex)
 
 **What happens**
 
@@ -58,9 +64,8 @@ It is *not* a direct cross-user account breach: file records are still session-s
 
 **Mitigation**
 
-- Tunnel and companion were stopped after this review. Do not restart the public tunnel without protection.
-- Add a per-launch random bearer token required on `/api/addin/*`, passed to the task pane through the generated manifest URL and sent as an `X-Addin-Token` header. Reject missing/wrong tokens.
-- Replace the broad CORS regex with the exact current tunnel origin, or remove the regex entirely and use a same-origin public hostname.
+- The tunnel/companion can be started only with the tokenized manifests now; no-token Analyze returns 401.
+- The tokenized tunnel and same-origin browser Analyze were verified 2026-11-25.
 - Prefer Cloudflare Access (or a private tunnel) for any remote Excel-web testing.
 - Do not leave the tunnel running unattended; rotate the URL and verify it is closed afterward.
 - For packaged distribution, do not expose the local server at all.
@@ -277,8 +282,8 @@ Cross-session test with two browser sessions: owner `GET workspace` → 200; sec
 
 ### Authorization exceptions
 
-- **Excel companion:** authentication is intentionally disabled; see SEC-1.
-- **Diagnostics:** authorization is a shared header token, not a user identity; see SEC-2.
+- **Excel companion:** no Supabase user auth, but `/api/addin/*` requires the persistent add-in token; same-origin CORS. See SEC-1.
+- **Diagnostics:** removed; no token endpoint remains.
 - **Auth-disabled deployments:** see SEC-3.
 - **Share links:** intentionally public to anyone with the token; see SEC-5.
 
@@ -292,13 +297,13 @@ No IDOR or missing owner check was found on the main web API routes reviewed.
 - `.env.example`, `deploy/RENDER.md`, `render.yaml` and `deploy/supabase-storage.sql` reference secret *names* and placeholders, not values. RLS revokes table/function access from `anon`/`authenticated` and grants only `service_role`.
 - No tracked `.pem`, `.key`, certificate, `.env` or generated tunnel manifest exists.
 - Untracked local artifacts remain sensitive: `.env` and `excel-addin/companion/certs/` private key. Exclude them from any package or support upload.
-- The Cloudflare quick-tunnel URL is a bearer capability, not a key; it is no longer active.
+- The Cloudflare quick-tunnel URL is a bearer capability; the current temporary test tunnel is token-protected but should still be treated as sensitive and stopped when finished.
 
 ## Remediation order
 
 ### Now / P0
 
-1. **Done (safe state):** public tunnel/companion stopped. Before any future remote Excel-web test, add per-launch token auth and exact-origin CORS; both are still pending and are tracked as P1 hardening.
+1. **Done:** companion token auth and same-origin CORS implemented; tokenized tunnel/browser flow verified. Keep the tunnel temporary and stop it when not testing.
 2. **Done:** Removed diagnostics endpoints, disk fields, `DIAG_TOKEN` and related `public_paths`; removed the token/log-path config; redeployed the live host and verified minimal health/OpenAPI.
 3. **Done:** Added a production `REQUIRE_AUTH` guard so missing Supabase configuration fails closed; live config enables it.
 
@@ -318,13 +323,17 @@ No IDOR or missing owner check was found on the main web API routes reviewed.
 
 ## P0 verification (2026-11-25)
 
-- Local suite: **739 passed**, including three new tests for fail-closed auth,
-  configured-auth rejection and diagnostics removal.
+- Local suite: **741 passed**, including tests for fail-closed auth,
+  configured-auth rejection, diagnostics removal, add-in token enforcement and
+  same-origin tunnel CORS.
 - Live `/api/health`:
   `{"status":"ok","max_upload_mb":5,"max_rows":15000,"max_columns":75}`.
 - Live `/openapi.json` contains no diagnostics paths.
 - Live unauthenticated protected requests return 401; invalid share tokens
   return 404.
+- Tokenized add-in tunnel: task pane tokenized, no-token Analyze 401, token
+  Analyze 200, Chromium Analyze passed, and both generated manifests validate.
+  The current tunnel is temporary and should be stopped after testing.
 - Live config: `REQUIRE_AUTH` is the string `"true"` (a JSON boolean would crash
   the PythonAnywhere launcher, which copies config values into `os.environ`);
   `DIAG_TOKEN` and `ERROR_LOG` are absent.

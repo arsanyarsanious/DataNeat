@@ -14,6 +14,13 @@ if (-not (Test-Path $cert)) {
   throw "Start .\companion\run.ps1 in another window first; the localhost certificate is missing."
 }
 
+$tokenFile = Join-Path $addin "generated\addin-token.txt"
+if (-not (Test-Path $tokenFile)) {
+  throw "Start .\companion\run.ps1 in another window first; the add-in token was not generated."
+}
+$addinToken = (Get-Content $tokenFile -Raw).Trim()
+if (-not $addinToken) { throw "The add-in token file is empty; restart the companion." }
+
 try {
   $code = & curl.exe -k -s -o NUL -w "%{http_code}" "https://localhost:$Port/api/health"
   if ($LASTEXITCODE -ne 0 -or "$code" -notmatch "200") { throw "Health check returned $code." }
@@ -54,18 +61,19 @@ New-Item -ItemType Directory -Force -Path $generated | Out-Null
 $manifestPath = Join-Path $generated "manifest.web.xml"
 $manifest = Get-Content (Join-Path $addin "manifest.xml") -Raw
 $manifest = $manifest.Replace("https://localhost:9443", $url)
+$manifest = $manifest.Replace("$url/taskpane.html", "$url/taskpane.html?token=$addinToken")
 [System.IO.File]::WriteAllText($manifestPath, $manifest, [System.Text.UTF8Encoding]::new($false))
 
 Write-Host ""
 Write-Host "DataNeat for Excel on the web" -ForegroundColor Green
-Write-Host "Public task pane: $url/taskpane.html"
+Write-Host "Public task pane: $url/taskpane.html (token required)"
 Write-Host "Manifest:         $manifestPath"
 Write-Host ""
 Write-Host "Keep this window open while testing. Press Ctrl+C to stop the tunnel."
 Write-Host "The URL changes each time this script runs; upload the newly generated manifest again."
 Write-Host ""
-Write-Host "Security: this is a temporary public tunnel to your local, unauthenticated companion." -ForegroundColor Yellow
-Write-Host "Stop it when you are done, and do not share the URL." -ForegroundColor Yellow
+Write-Host "Security: the tunnel is temporary and the API requires the generated add-in token." -ForegroundColor Yellow
+Write-Host "The token is stored in excel-addin\generated\addin-token.txt. Stop the tunnel when done and do not share it." -ForegroundColor Yellow
 Write-Host ""
 
 try {

@@ -35,11 +35,13 @@ cd "C:\Users\Arsany Arsanious\Desktop\DataNeat-Portable\excel-addin"
 
 The script:
 - downloads `cloudflared` once (if needed),
+- reads the persistent add-in token created by `run.ps1`,
 - starts a temporary `*.trycloudflare.com` tunnel,
-- generates `generated/manifest.web.xml` pointing at that tunnel,
-- prints the public task-pane URL and manifest path.
+- generates `generated/manifest.web.xml` with a tokenized task-pane URL,
+- prints the public task-pane base URL and manifest path.
 
-Keep both windows open. The tunnel URL changes every run.
+Keep both windows open. The tunnel URL changes every run; the token persists
+until you delete `generated/addin-token.txt` and restart the companion.
 
 ### 3. Open Excel on the web and sideload
 
@@ -66,6 +68,11 @@ Highlighting on Excel web is batched: original-fill backup, fill application,
 and clear/restore use 200 ranges per Office.js sync. This avoids Office’s
 request-payload limit on sheets with thousands of flagged cells.
 
+The companion now requires the launch token on `/api/addin/*`. The token is in
+the generated manifest URL and is sent as `X-Addin-Token`; the broad
+`*.trycloudflare.com` CORS rule was replaced by a same-origin check. Loading the
+task pane without the token lets the page render, but Analyze returns 401.
+
 The web build detects Excel Online and uses smaller read batches, a 1,000,000
 cell limit and a 5,000 highlighted-cell cap. Desktop remains 3M cells / 10k
 highlights.
@@ -86,15 +93,19 @@ highlights.
 - If you see “The request payload size has exceeded the limit”, the task pane
   is stale (old one-sync highlighting). Close/reopen the add-in to load the
   batched highlighter and retry.
+- If you see “Add-in access token is missing or invalid”, re-upload the newest
+  generated manifest, close and reopen the task pane, and retry. The token is
+  stored in `excel-addin/generated/addin-token.txt`.
 - If Excel web still blocks the tunnel, use a licensed desktop Excel or the
-  browser mock (`/taskpane.html?mock=1`) to continue UI/engine testing.
+  browser mock (`/taskpane.html?mock=1&token=...`) to continue UI/engine testing.
 
 ## Security
 
-The quick tunnel exposes the local companion to the internet for as long as it
-runs. The companion has no login in this preview and can analyze uploaded sheet
-data on your machine. Use it only for temporary testing, do not share the URL,
-and press **Ctrl+C** in the tunnel window when finished.
+The quick tunnel is temporary and the API requires the generated add-in token,
+but the task pane and manifest URL are still reachable by anyone who has them.
+Use it only for temporary testing, do not share the URL or generated manifests,
+and press **Ctrl+C** in the tunnel window when finished. The token is persisted
+locally in `generated/addin-token.txt`; delete it and restart to rotate.
 
 The quick tunnel sends traffic through Cloudflare; the sheet data is processed
 by the local engine, but the task-pane/API traffic traverses the tunnel. Do not

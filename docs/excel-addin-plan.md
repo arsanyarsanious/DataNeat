@@ -1,7 +1,14 @@
 # DataNeat Excel add-in — proposed plan
 
-Status: **proposal only, not started.** This document defines the scope,
-architecture options, phases, risks and the decisions needed from the owner.
+Status: **Tier L preview implemented; Tier XL not started.** This document
+defines the scope, architecture options, phases, risks and the decisions needed
+from the owner.
+
+> **2026-11-25 update:** Excel on the web is now supported as a temporary test
+> path via `companion/web-tunnel.ps1`. The task pane and `/api/addin/*` require
+> a persistent add-in token; generated manifests carry it. Response batching is
+> 200 ranges/sync. Highlight visual verification is still pending; Tier XL
+> remains deferred.
 
 ## 0. Confirmed decisions (this round)
 

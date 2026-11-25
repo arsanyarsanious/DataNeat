@@ -49,13 +49,13 @@ The app is intentionally more “careful data review” than “one-click magic�
 | Live limits | 5 MiB upload, 15,000 rows, 75 columns, 250,000-cell analysis budget, 300 MB snapshot budget, 200 stored records; 30 saved files / 40 MiB per account |
 | Live auth | Supabase enabled, Google sign-in enabled; `REQUIRE_AUTH=true` fail-closed guard deployed; public share routes only auth bypass |
 | Live deployment | **Behind GitHub main.** On 2026-11-25 a minimal P0 patch of the live `main.py` removed diagnostics/disk fields and added the auth guard; the live config had `DIAG_TOKEN`/`ERROR_LOG` removed and `REQUIRE_AUTH` enabled. The full merged backend (workflow/add-in/etc.) is still not deployed. Live health now returns only status/limits. |
-| Backend tests | **739 passed** (41 test files), including P0 auth-guard and diagnostics-removal tests |
+| Backend tests | **741 passed** (41 test files), including P0 auth-guard and diagnostics-removal tests |
 | Frontend | TypeScript + `CLOUDFLARE_EXPORT=1` production build last passed after the history merge; Excel add-in has no frontend build step |
 | Excel add-in | Tier L **read-only preview** implemented locally. Real Excel task pane loads and analysis works; highlighting is implemented but was blocked on this machine by unlicensed Excel / Protected View. Not installed for other users yet. |
 | Excel on the web | Analyze works in Excel web (sheet with 5,555 rows / 36 columns returned 31,823 issue cells). Highlight initially hit Office’s request-payload limit because thousands of ranges were sent in one sync; fill/backup/clear are now batched 200 ranges per sync. Retest highlight pending. |
 | Excel manifest | Validated with Microsoft’s `office-addin-manifest`; SourceLocation `https://localhost:9443/taskpane.html` |
 | Deployment status file | `C:\Users\Arsany Arsanious\Documents\Codex\outputs\dataneat-deployment\DEPLOYMENT_STATUS.md`; updated for the P0 patch, but full-live reconciliation remains |
-| Local add-in companion | Can run on `https://localhost:9443`; certificate trusted for current Windows user; test Excel workbook exists in the workspace (not repo). The public tunnel is stopped. |
+| Local add-in companion | Runs on `https://localhost:9443`; certificate trusted for current Windows user; token-protected `/api/addin/*`; generated local/web manifests; test workbook outside repo. Temporary tokenized tunnel may be active only during a test session. |
 
 **Immediate source-of-truth caveat:** deploy decisions must compare repo `main`
 with the live backend/static build. Do not assume live is current.
@@ -302,13 +302,16 @@ These decisions are audit/undoable but excluded from transferable recipes.
 ### 3.17 Excel add-in (Tier L preview — new)
 
 - `excel-addin/` at repo root; Windows-only local companion.
-- `manifest.xml` sideload task pane, `ReadWriteDocument`, SourceLocation
-  `https://localhost:9443/taskpane.html`; validated by Microsoft validator.
+- `manifest.xml` is the base manifest; `run.ps1` generates
+  `generated/manifest.local.xml` with the current tokenized task-pane URL.
+  `ADDIN_TOKEN` is generated/persisted in `generated/addin-token.txt`; delete
+  that file and restart to rotate.
 - `companion/run.ps1` runs the existing FastAPI app with:
   - `PYTHONPATH=<repo>/backend`, `STATIC_DIR=<taskpane>`,
     `STORAGE_DIR=%LOCALAPPDATA%\DataNeat\excel-addin\storage`
   - TLS cert/key under `companion/certs` (gitignored)
-  - auth disabled (empty Supabase env), AI off, `MAX_UPLOAD_MB=60`,
+  - auth disabled for Supabase (local helper), but `ADDIN_TOKEN` is generated
+    persistently and required on `/api/addin/*`; AI off, `MAX_UPLOAD_MB=60`,
     `MAX_UPLOAD_ROWS=1,000,000`, `MAX_UPLOAD_COLUMNS=100`,
     `MAX_WORKFLOW_CELLS=3,000,000`, `ADDIN_MAX_CELLS=3,000,000`,
     `ANALYSIS_SYNC_CELLS=0`
@@ -317,13 +320,14 @@ These decisions are audit/undoable but excluded from transferable recipes.
   localhost certificate. Python 3.12 preferred; fallback to default Python.
 - `companion/certs.py` generates a self-signed localhost cert and adds it to
   the current user’s Root store.
-- Task pane: reads active worksheet used range in 15k-row chunks, sends displayed
-  cell text as CSV to `POST /api/addin/analyze`, shows metrics/issue table,
-  highlights up to **10,000** flagged cells as fill colors, stores original
+- Task pane: reads active worksheet used range in 15k-row chunks (5k on Excel
+  Online), sends displayed cell text as JSON to
+  `POST /api/addin/analyze-json` with `X-Addin-Token`, shows metrics/issue table,
+  highlights up to **10,000** flagged cells (5,000 on web), and stores original
   fills in Office document settings (or localStorage fallback) for Clear.
-- Backend `services/addin.py`: read-only endpoint, max 3M cells, profiles with
+- Backend `services/addin.py`: read-only endpoints, max 3M cells, profiles with
   the shared engine, annotates in 20k-row chunks, returns compact cells capped
-  at the requested highlight cap (server max 200k; taskpane asks 10k).
+  at the requested highlight cap (server max 200k; taskpane asks 10k local/5k web).
 - Verified in real Excel 365 desktop: task pane loaded at localhost, analysis
   returned 17 flagged cells across 6 columns. **Highlighting could not be
   visually verified on this machine** because Excel is unlicensed/protected;
@@ -333,19 +337,23 @@ These decisions are audit/undoable but excluded from transferable recipes.
 - Not deployed as an installer or packaged app. It relies on Python and a
   locally trusted cert. No automatic cleaning/corrections yet. Tier XL
   (10M cells) is only a plan.
-- **Excel on the web testing path:** `companion/web-tunnel.ps1` starts a
-  temporary Cloudflare quick tunnel to the local companion and generates
-  `excel-addin/generated/manifest.web.xml`. Excel web can sideload that manifest
-  without a desktop license. The URL changes per run and is gitignored. The
-  companion allows `*.trycloudflare.com` origins via `CORS_ORIGIN_REGEX`; web
-  mode uses 5k-row batches, a 1M-cell cap and a 5k highlight cap.
+- **Excel on the web testing path:** `companion/web-tunnel.ps1` reads the
+  persistent token produced by `run.ps1`, starts a temporary Cloudflare quick
+  tunnel, and generates `excel-addin/generated/manifest.web.xml` with a
+  tokenized task-pane URL. The task pane sends `X-Addin-Token`; missing/wrong
+  tokens get 401. The broad `*.trycloudflare.com` CORS regex was removed; the
+  backend allows same-origin requests by matching the Origin host to the
+  request Host. Web mode uses 5k-row batches, a 1M-cell cap and a 5k highlight
+  cap. Tokenized tunnel/browser analysis was verified 2026-11-25.
   - The Excel-web task pane **loads** and its initial Analyze reached the
     backend, but Office web's multipart `FormData` path produced FastAPI
     “There was an error parsing the body”.
   - The task pane now sends JSON to `POST /api/addin/analyze-json`
-    (`{csv, highlight_cap}`); the multipart `/api/addin/analyze` endpoint is
-    retained for desktop/compatibility. JSON analysis is verified through the
-    public tunnel with Chromium and with a real Excel-web task pane request.
+    (`{csv, highlight_cap}`) with the add-in token; the multipart
+    `/api/addin/analyze` endpoint is retained for desktop/compatibility. JSON
+    analysis is verified through the token-protected tunnel with Chromium; the
+    Excel-web host needs a final Analyze/Highlight retest after re-uploading
+    the new tokenized manifest.
   - Final in-Excel-web highlight/clear verification is still pending.
   - Excel web accepted Analyze on a 5,555-row × 36-column sheet (31,823 issue
     cells), then rejected the first Highlight attempt with Office’s
@@ -483,9 +491,10 @@ Local companion FastAPI https://127.0.0.1:9443
   ├─ existing profiler/annotator (/api/addin/analyze)
   └─ taskpane static assets (STATIC_DIR)
 ```
-The companion is single-user localhost; it disables Supabase auth. A local
-certificate trusted for the Windows user enables HTTPS. `manifest.xml` points
-at the localhost task pane. No cloud data path exists in this preview.
+The companion is single-user localhost and does not use Supabase auth. A local
+certificate trusted for the Windows user enables HTTPS. `/api/addin/*` requires
+a persistent add-in token generated by `run.ps1`; generated manifests embed it.
+No cloud data path exists in this preview.
 
 ### 4.8 Deployment topology
 
@@ -560,15 +569,16 @@ at the localhost task pane. No cloud data path exists in this preview.
 - Binds `127.0.0.1`, HTTPS with a self-signed localhost certificate trusted in
   the current user’s Root store; private key is an unencrypted file under
   `excel-addin/companion/certs` (gitignored).
-- **Auth is disabled** in the companion; no bearer/CSRF token on its API. Any
-  local process/page that can reach `https://localhost:9443` can invoke
-  analysis/upload. Threat is local-only, but should be hardened with an
-  add-in token, Origin check, and perhaps per-launch secret.
+- **Supabase auth is disabled** in the companion, but `/api/addin/*` requires
+  the persistent `ADDIN_TOKEN`; generated manifests carry it in the task-pane
+  URL and the task pane sends `X-Addin-Token`. Same-origin tunnel requests are
+  allowed by Host/Origin match; the broad trycloudflare CORS regex is gone.
+  Rotate by deleting `generated/addin-token.txt` and restarting.
 - Task pane has `ReadWriteDocument`; it can edit the workbook (intended).
-- The web-tunnel path exposes the unauthenticated local companion through a
-  temporary public `*.trycloudflare.com` URL. The CORS regex allows any
-  trycloudflare subdomain, not only the current tunnel. Treat it as a temporary
-  test channel only; stop it after use and do not send confidential data.
+- The web-tunnel helper exposes the token-protected companion through a
+  temporary public `*.trycloudflare.com` URL. The tunnel URL/manifest are still
+  bearer capabilities; treat them as temporary secrets, stop the tunnel after
+  use, and do not send confidential data.
 - `saveBackup` of original fills uses Office document settings (size-limited);
   large backups fall back to localStorage or fail restore.
 - Certificate is generated as a self-signed CA (`BasicConstraints CA=true`);
@@ -577,9 +587,9 @@ at the localhost task pane. No cloud data path exists in this preview.
 
 ### 5.7 Known security issues / cleanup required
 
-**Full review: `SECURITY_AUDIT.md`.** The public Excel-web tunnel and
-unauthenticated companion were stopped after that audit; do not restart them
-without add-in token auth and exact-origin CORS.
+**Full review: `SECURITY_AUDIT.md`.** The Excel-web tunnel is token-protected
+and same-origin constrained; it remains a temporary testing channel and should
+be stopped when not in use.
 
 1. **Diagnostics cleanup completed 2026-11-25.** Removed
    `/api/diagnostics/*`, disk fields from `/api/health`, and the entries from
@@ -591,10 +601,10 @@ without add-in token auth and exact-origin CORS.
    merged backend (workflows, add-in endpoint, other changes) is not. Deploying
    it still needs the normal test/browser/rollback process. Compare and verify;
    do not assume.
-3. **Add-in companion unauthenticated localhost API**: it was exposed through a
-   public quick tunnel during Excel-web testing; the tunnel and companion are
-   stopped. Add a per-launch token, exact-origin CORS and protected tunnel
-   before reuse.
+3. **Add-in companion hardening completed 2026-11-25**: `/api/addin/*` requires
+   the persistent add-in token; generated manifests carry it; same-origin
+   Host/Origin matching replaced the broad trycloudflare CORS regex. The tunnel
+   remains temporary and should be stopped after testing.
 4. **Self-signed CA cert** and Python dependency/installer not production-grade.
 5. **Share/PII**: share tokens are bearer secrets; PDF/preview values visible;
    warn users; limit TTL.
@@ -653,7 +663,7 @@ $env:STORAGE_DIR = "$tmp\test-store"
 & "$venv\Scripts\python.exe" -m pytest "$project\backend\tests" -q `
   -p no:cacheprovider --basetemp="$tmp\pytest-run"
 ```
-Latest: **739 passed** (2 pre-existing deprecation warnings).
+Latest: **741 passed** (2 pre-existing deprecation warnings).
 
 ### 6.2 Frontend typecheck/build
 
@@ -694,7 +704,8 @@ with the bundled node. Existing QA scripts live in
 cd 'C:\Users\Arsany Arsanious\Desktop\DataNeat-Portable\excel-addin'
 .\companion\setup.ps1     # first machine/setup; Python 3.12 preferred
 .\companion\run.ps1       # serves https://localhost:9443
-# Excel: Insert > Get Add-ins > My Add-ins > Upload My Add-in > manifest.xml
+# Excel: Insert > Get Add-ins > My Add-ins > Upload My Add-in > generated\manifest.local.xml
+# (not manifest.xml; the generated manifest carries the current token)
 # or open the already-registered add-in; task pane URL is printed by run.ps1
 ```
 On this machine only Python 3.13 is installed; `.venv` is currently a junction
@@ -756,7 +767,7 @@ last deploy**.
    - deployed the minimal P0 patch to the live host and verified health/OpenAPI.
 2. **Reconcile live with repo `main`**:
    - the live host is still behind the full repo (workflows, add-in endpoint,
-     later features); fetch/diff, run the 739 tests + frontend build + browser
+     later features); fetch/diff, run the 741 tests + frontend build + browser
      smoke, then deploy with the normal rollback path;
    - update `DEPLOYMENT_STATUS.md`.
 3. **Verify Excel highlighting on a licensed Excel**, and retest the new JSON
@@ -773,11 +784,11 @@ last deploy**.
 
 ### P1 — high-value unfinished work
 
-5. **Excel add-in productionization**
+5. Add-in productionization
    - Package companion (PyInstaller/installer; bundled Python 3.12; signed).
    - Auto-start / discovery / port handshake; leaf certificate (not a CA);
      uninstall instructions; taskpane caching/versioning.
-   - Add a local API token and Origin/CSRF protection; bind only localhost.
+   - Token auth and same-origin CORS are implemented; keep them when packaging.
    - Add clear error UI for Protected View/read-only/unlicensed.
    - Add range selection or “analyze selected sheet/table” and progress/ETA.
    - Verify Tier L at 1M–3M cells; current local 400k-cell analysis took ~42s
@@ -835,7 +846,8 @@ last deploy**.
 1. Read `excel-addin/README.md`, `docs/excel-addin-plan.md`, and
    `backend/app/services/addin.py`.
 2. Start companion (`excel-addin\companion\run.ps1`), open Excel, sideload
-   `manifest.xml`, sign in/license Excel, enable editing.
+   `generated\manifest.local.xml` (not the base manifest), sign in/license
+   Excel, enable editing.
 3. Test analysis; then highlighting; then `Clear highlights`.
 4. If highlight fails on a licensed Excel, capture the exact Office.js error
    (`AccessDenied`/“You cannot perform the requested operation”), check
@@ -884,7 +896,7 @@ stable first.
 | Bundled Python 3.12 venv (`dnvenv`) | backend runs/tests; project has no committed venv |
 | Node.js 24 + pnpm 11 (bundled paths) | frontend install/typecheck/build; **no npm in bundle** |
 | Next.js 16 / React 19 / TypeScript | frontend |
-| pytest 9 | 41 backend test files, 739 tests |
+| pytest 9 | 41 backend test files, 741 tests |
 | Playwright 1.64 + Chromium | browser QA against local and live builds |
 | httpx / requests | API probes and deployment tests |
 | PythonAnywhere API | file upload, static upload, reload; token in private folder |
@@ -932,7 +944,9 @@ Known environment quirks:
 - `frontend/app/layout.tsx` — CSS import order and font
 - `excel-addin/taskpane/taskpane.js` — Office.js analyzer/highlighter
 - `excel-addin/companion/run.ps1` / `setup.ps1` / `certs.py`
-- `excel-addin/manifest.xml` — sideload manifest
+- `excel-addin/manifest.xml` — base sideload manifest; use generated manifests
+- `excel-addin/generated/manifest.local.xml` / `manifest.web.xml` — tokenized manifests
+- `excel-addin/generated/addin-token.txt` — persistent local add-in token (gitignored)
 - `docs/excel-addin-plan.md` — full add-in roadmap
 - `docs/upload-reliability.md` — async analysis/timeout history
 - `docs/percentage-scale.md` — Phase A decisions
@@ -949,11 +963,12 @@ Known environment quirks:
 | Live | https://arsany.pythonanywhere.com/ |
 | Local project | `C:\Users\Arsany Arsanious\Desktop\DataNeat-Portable` |
 | Backend venv | `C:\Users\Arsany Arsanious\Documents\deepseek-harness\default-workspace\dnvenv` |
-| Backend tests | 739 passed |
+| Backend tests | 741 passed |
 | API health (live) | `/api/health` returns status/limits only (no disk fields) |
 | Auth guard | `REQUIRE_AUTH=true` in live config; fail-closed if Supabase is missing |
-| Excel task pane | `https://localhost:9443/taskpane.html` |
-| Excel manifest | `excel-addin/manifest.xml` |
+| Add-in token | `excel-addin\generated\addin-token.txt`; matches generated local/web manifests |
+| Excel task pane | `https://localhost:9443/taskpane.html?token=...` (tokenized URL from generated manifest) |
+| Excel manifest | `excel-addin/generated/manifest.local.xml` or `generated/manifest.web.xml` |
 | Add-in test workbook | `C:\Users\Arsany Arsanious\Documents\deepseek-harness\default-workspace\DataNeat-addin-test.xlsx` (not repo) |
 | Deployment scripts | `C:\Users\Arsany Arsanious\Documents\deepseek-harness\default-workspace\pa_*.py` |
 | Deployment status | `C:\Users\Arsany Arsanious\Documents\Codex\outputs\dataneat-deployment\DEPLOYMENT_STATUS.md` |
