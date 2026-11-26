@@ -2,6 +2,7 @@
 import { Fragment, createContext, useContext, useEffect, useRef, useState, type ReactNode, type FormEvent } from "react";
 import { createClient, type SupabaseClient, type Session } from "@supabase/supabase-js";
 import { ShieldCheck } from "lucide-react";
+import { LoadingOverlay } from "./loading-skeleton";
 import { DataNeatMark } from "./dataneat-mark";
 import { ThemeToggle } from "./theme-toggle";
 import { api } from "@/lib/types";
@@ -128,7 +129,7 @@ export function AccountAccess({ children }: { children: ReactNode }) {
     let active = true;
     let unsubscribe: (() => void) | undefined;
     let sequence = 0;
-    if (["/", "/privacy", "/guide"].includes(window.location.pathname)) { setPublicPage(true); setPending(false); return; }
+    if (["/", "/privacy", "/guide", "/share"].includes(window.location.pathname)) { setPublicPage(true); setPending(false); return; }
     setLoginPage(window.location.pathname === "/login");
     setRecovery(new URLSearchParams(window.location.search).get("recovery") === "1");
     async function start() {
@@ -180,17 +181,25 @@ export function AccountAccess({ children }: { children: ReactNode }) {
     return () => { active = false; unsubscribe?.(); };
   }, []);
   if (publicPage) return <>{children}</>;
-  if (pending) return <main className="access-loading" role="status">Opening your workspace…</main>;
-  if (!config) return <main className="access-loading"><p role="alert">{error || "The workspace is temporarily unavailable."}</p><button className="button" onClick={() => window.location.reload()}>Retry</button></main>;
-  if (recovery || (config.enabled && !account) || (loginPage && !account)) return <>
-    {error && <p role="alert" className="access-global-error">{error}</p>}
-    <LoginPanel client={client} config={config} recovery={recovery} onRecovered={() => { setRecovery(false); window.location.replace(returnPath()); }} />
-  </>;
-  return <AccountNavigationContext.Provider value={account ? {
-    logout: () => { clearWorkspaceCache(); sessionStorage.removeItem("dataneat-account-id"); setAccount(null); setUsage(null); void api("/auth/logout", { method: "POST" }); void client?.auth.signOut(); },
-    showUsage: account.admin ? () => void api<NonNullable<typeof usage>>("/admin/usage").then(setUsage).catch(e => setError(e.message)) : undefined,
-  } : null}>
-    {usage && <dialog ref={usageDialog} className="usage-overview" aria-labelledby="usage-overview-title" onCancel={()=>setUsage(null)}><h2 id="usage-overview-title">Usage overview · last {usage.retention_days} days</h2><button type="button" onClick={() => setUsage(null)}>Close</button><div className="table-scroll"><table><thead><tr><th>Account</th><th>Sign-ins</th><th>Uploads</th><th>Cleaning requests</th><th>Confirmed fixes</th><th>Downloads</th></tr></thead><tbody>{usage.users.map(u => <tr key={u.email}><td>{u.email}</td>{["sign_in", "upload", "clean", "editor_fix", "download"].map(e => <td key={e}>{u.counts[e] || 0}</td>)}</tr>)}</tbody></table></div></dialog>}
-    <Fragment key={account?.id || "local"}>{children}</Fragment>
-  </AccountNavigationContext.Provider>;
+  // Keep the server and first client render identical; the route-specific
+  // skeleton appears from the page itself once the shell has hydrated.
+  const skeletonVariant = "workspace";
+  let content = null;
+  if (!config) {
+    content = <main className="access-loading"><p role="alert">{error || "The workspace is temporarily unavailable."}</p><button className="button" onClick={() => window.location.reload()}>Retry</button></main>;
+  } else if (recovery || (config.enabled && !account) || (loginPage && !account)) {
+    content = <>
+      {error && <p role="alert" className="access-global-error">{error}</p>}
+      <LoginPanel client={client} config={config} recovery={recovery} onRecovered={() => { setRecovery(false); window.location.replace(returnPath()); }} />
+    </>;
+  } else {
+    content = <AccountNavigationContext.Provider value={account ? {
+      logout: () => { clearWorkspaceCache(); sessionStorage.removeItem("dataneat-account-id"); setAccount(null); setUsage(null); void api("/auth/logout", { method: "POST" }); void client?.auth.signOut(); },
+      showUsage: account.admin ? () => void api<NonNullable<typeof usage>>("/admin/usage").then(setUsage).catch(e => setError(e.message)) : undefined,
+    } : null}>
+      {usage && <dialog ref={usageDialog} className="usage-overview" aria-labelledby="usage-overview-title" onCancel={()=>setUsage(null)}><h2 id="usage-overview-title">Usage overview · last {usage.retention_days} days</h2><button type="button" onClick={() => setUsage(null)}>Close</button><div className="table-scroll"><table><thead><tr><th>Account</th><th>Sign-ins</th><th>Uploads</th><th>Cleaning requests</th><th>Confirmed fixes</th><th>Downloads</th></tr></thead><tbody>{usage.users.map(u => <tr key={u.email}><td>{u.email}</td>{["sign_in", "upload", "clean", "editor_fix", "download"].map(e => <td key={e}>{u.counts[e] || 0}</td>)}</tr>)}</tbody></table></div></dialog>}
+      <Fragment key={account?.id || "local"}>{children}</Fragment>
+    </AccountNavigationContext.Provider>;
+  }
+  return <LoadingOverlay loading={pending} variant={skeletonVariant}>{content}</LoadingOverlay>;
 }

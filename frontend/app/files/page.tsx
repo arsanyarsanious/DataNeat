@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowRight, FolderOpen, Pencil, Search, ShieldCheck, Trash2 } from "lucide-react";
 import { WorkspaceSidebar } from "@/components/workspace-sidebar";
+import { LoadingOverlay } from "@/components/loading-skeleton";
 import { api } from "@/lib/types";
 import "./files.css";
 
@@ -81,7 +82,8 @@ export default function MyFilesPage() {
     } catch (e) { setError((e as Error).message); }
     finally { setBusyFile(""); }
   }
-  return <div className={`app-shell files-shell${collapsed ? " sidebar-collapsed" : ""}`}>
+  return <LoadingOverlay loading={loading} variant="files" activeIndex={1}>
+    <div className={`app-shell files-shell${collapsed ? " sidebar-collapsed" : ""}`}>
     <WorkspaceSidebar active="files" collapsed={collapsed} dark={dark} onToggle={() => { const next = !collapsed; setCollapsed(next); localStorage.setItem("dataneat-sidebar-collapsed", String(next)); }} onTheme={() => { const next = !dark; setDark(next); document.documentElement.classList.toggle("dark", next); localStorage.setItem("dataneat-theme", next ? "dark" : "light"); }} />
     <div className="main-shell"><header className="topbar files-topbar"><div className="breadcrumb">Workspace <span>My files</span></div><a className="button outline" href="/workspace">Open data cleaner <ArrowRight size={14} /></a></header>
       <main className="account-files-page">
@@ -102,5 +104,6 @@ export default function MyFilesPage() {
         {message && <p className="account-files-message" role="status">{message}</p>}
       </main>
     </div>
-  </div>;
+  </div>
+  </LoadingOverlay>;
 }

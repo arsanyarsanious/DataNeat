@@ -299,6 +299,29 @@ These decisions are audit/undoable but excluded from transferable recipes.
 - Cover, login, workspace, files, guide, privacy and share all use the system.
 - Reviewed in headless Chromium at 1440/950 and 390px mobile, dark and light.
 
+### 3.16.1 Loading skeleton (2026-11-26)
+
+- All main app loading states now show a responsive shell skeleton instead of a
+  blank “Opening your workspace…” screen: sidebar/brand/nav pills, top status
+  bar with pulsing mint dot and “Preparing your data environment...”, heading,
+  stepper, and a 6-column / 11-row grid card.
+- Implemented in `frontend/components/loading-skeleton.tsx` with variants
+  `workspace`, `files`, `share`, `login`; `LoadingOverlay` cross-fades the
+  loaded page in over 200ms. Auth resolution, workspace restore, files refresh,
+  shared-review fetch and route `loading.tsx` files use it.
+- Theme tokens live in `frontend/app/skeleton.css`: canvas `#0B0F19/#F8FAFC`,
+  surfaces `#111827/#FFFFFF`, borders `#1F2937/#E2E8F0`, base
+  `#1F2937/#E2E8F0`, highlight `#2D3748/#F1F5F9`, active nav tint
+  `rgba(16,185,129,.12)/.10`, active rail `#10B981/#059669`, status text
+  `#9CA3AF/#64748B`. Shimmer is 1.5s at 200%.
+- A pre-paint theme script in `layout.tsx` applies the stored dark/light class
+  before the skeleton renders, avoiding a wrong-theme flash.
+- Responsive: 246px sidebar desktop, 76px rail at 801–1100px, horizontal nav and
+  three visible grid columns at ≤800px. Reduced-motion users see static blocks.
+- Verified with Playwright in dark/light desktop and dark mobile; computed
+  colors and 3px active rail match; fade-out measured; no hydration errors.
+  Details: `docs/loading-skeleton.md`.
+
 ### 3.17 Excel add-in (Tier L preview — new)
 
 - `excel-addin/` at repo root; Windows-only local companion.
@@ -941,7 +964,9 @@ Known environment quirks:
 - `frontend/components/interactive-sheet.tsx` — sheet/panels/tools/results
 - `frontend/components/column-settings.tsx` — types/rules/imputation/AI
 - `frontend/app/premium-theme.css` — final design layer
-- `frontend/app/layout.tsx` — CSS import order and font
+- `frontend/app/skeleton.css` / `components/loading-skeleton.tsx` — theme-aware loading shell
+- `docs/loading-skeleton.md` — skeleton tokens, variants and verification
+- `frontend/app/layout.tsx` — CSS import order, font and pre-paint theme script
 - `excel-addin/taskpane/taskpane.js` — Office.js analyzer/highlighter
 - `excel-addin/companion/run.ps1` / `setup.ps1` / `certs.py`
 - `excel-addin/manifest.xml` — base sideload manifest; use generated manifests

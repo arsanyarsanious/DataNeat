@@ -322,6 +322,15 @@ Backend suite: **61 passed**, including full-column add/remove/no-change behavio
   - invalid share tokens still return 404.
 - The full merged repo backend is still not deployed; only the security P0 patch was applied live.
 
+## November 26, 2026 — Theme-aware loading skeleton
+
+- Replaced the blank “Opening your workspace…” transition with a persistent app-shell skeleton: sidebar brand/nav pills, pulsing status, heading, stepper, 6-column/11-row grid card.
+- Added `frontend/components/loading-skeleton.tsx` (`workspace`, `files`, `share`, `login` variants, `LoadingOverlay` 200ms fade-out), `frontend/app/skeleton.css`, root/segment `loading.tsx` files and a pre-paint theme script.
+- Applied to account/auth resolution, workspace restore, files refresh, shared-review loading and route transitions.
+- Verified tokens with Playwright computed styles: dark canvas `rgb(11,15,25)`, light `rgb(248,250,252)`, surfaces/borders/base/highlight exact, active nav tint and 3px `#10B981`/`#059669` rail, status 13px, 11 rows/6 columns, 1.5s shimmer.
+- Captured dark/light 1440×900 and dark 390×844 screenshots; mobile grid now shows three columns without clipping. Fade-out measured mid-transition; loaded workspace/files/share pages rendered with no hydration errors.
+- `tsc --noEmit` passed; `CLOUDFLARE_EXPORT=1 pnpm run build` passed (10 static pages). Details: `docs/loading-skeleton.md`.
+
 ## November 25, 2026 — Companion token and same-origin CORS
 
 - `run.ps1` now generates/persists a 32-byte `ADDIN_TOKEN`, writes `generated/addin-token.txt`, and emits `generated/manifest.local.xml` with a tokenized task-pane URL. `web-tunnel.ps1` embeds the same token in `generated/manifest.web.xml`.

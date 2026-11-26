@@ -16,6 +16,7 @@ import "./sidebar-account.css";
 import "./column-presentation.css";
 import "./auto-cleaning-survey.css";
 import "./premium-theme.css";
+import "./skeleton.css";
 import { AccountAccess } from "@/components/account-access";
 const manrope = localFont({
   src: "./fonts/InterVariable.woff2",
@@ -35,6 +36,13 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{if(localStorage.getItem("dataneat-theme")==="light"){document.documentElement.classList.remove("dark");}else{document.documentElement.classList.add("dark");}}catch(e){}`,
+          }}
+        />
+      </head>
       <body className={manrope.variable}><AccountAccess>{children}</AccountAccess></body>
     </html>
   );

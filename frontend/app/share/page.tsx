@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { FileDown, Moon, ShieldCheck, Sun } from "lucide-react";
 import { DataNeatMark } from "@/components/dataneat-mark";
+import { LoadingOverlay } from "@/components/loading-skeleton";
 import { api } from "@/lib/types";
 import "./share.css";
 
@@ -56,6 +57,7 @@ export default function SharePage() {
   const expires = view ? new Date(view.expires_at * 1000).toLocaleString() : "";
 
   return (
+    <LoadingOverlay loading={loading} variant="share" label="Opening the shared review...">
     <main className="share-page">
       <header className="share-topbar">
         <div className="share-brand">
@@ -197,5 +199,6 @@ export default function SharePage() {
         )}
       </section>
     </main>
+    </LoadingOverlay>
   );
 }

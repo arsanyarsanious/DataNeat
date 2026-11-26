@@ -594,3 +594,17 @@ Validation: 678 backend tests passed on the integrated changes; 45 focused tests
 - Excel web Analyze then worked on a 5,555 × 36 sheet (31,823 issue cells). The first Highlight attempt hit Office’s request-payload limit, so fill application, original-fill backup, and clear/restore now batch 200 ranges per sync. Reopen the task pane and retest highlight/clear.
 - Standing owner rule: every app change updates `AGENT_BRIEF.md` and the relevant GitHub Markdown docs in the same commit.
 - Security review completed 2026-11-25; see `SECURITY_AUDIT.md`. Highest risk: the Excel-web public tunnel exposed an unauthenticated companion; the tunnel/companion were stopped. P0 cleanup completed 2026-11-25: removed diagnostics endpoints/disk fields and `DIAG_TOKEN`/`ERROR_LOG` from the live config, added/tested the fail-closed `REQUIRE_AUTH` guard, and redeployed a minimal live backend patch. Full repo/live reconciliation remains.
+
+## 45. Loading skeleton — November 26, 2026
+
+- Replaced the blank “Opening your workspace…” transition with a persistent,
+  theme-aware shell skeleton (sidebar brand + nav pills, pulsing status, grid
+  card with 6 headers/11 rows).
+- Added `frontend/components/loading-skeleton.tsx`, `frontend/app/skeleton.css`,
+  root/segment `loading.tsx` files, and a pre-paint theme script.
+- Applied to auth resolution, workspace restore, files refresh, shared review
+  and route transitions; loading fades out over 200ms.
+- Tokens match the requested light/dark palette exactly; responsive at
+  246px / 76px / mobile horizontal shell; reduced-motion supported.
+- Verified with TypeScript, static build, and Playwright dark/light/mobile
+  screenshots; no hydration errors. See `docs/loading-skeleton.md`.

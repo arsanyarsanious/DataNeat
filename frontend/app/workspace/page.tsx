@@ -24,6 +24,7 @@ import { Button } from "@/components/ui/button";
 
 import { InteractiveSheet } from "@/components/interactive-sheet";
 import { CleaningProgress } from "@/components/cleaning-progress";
+import { LoadingOverlay } from "@/components/loading-skeleton";
 import { WorkspaceSidebar } from "@/components/workspace-sidebar";
 import { DataNeatMark } from "@/components/dataneat-mark";
 import { AccountFileControls, type FileStorageStatus } from "@/components/account-file-controls";
@@ -259,6 +260,7 @@ export default function Home() {
     }
   }
   return (
+    <LoadingOverlay loading={restoring} variant="workspace">
     <div className={`app-shell${sidebarCollapsed ? " sidebar-collapsed" : ""}${stage==="editor"?" workspace-focused":""}`}>
       <WorkspaceSidebar collapsed={sidebarCollapsed} dark={dark} onTheme={theme} onToggle={() => {
         const next = !sidebarCollapsed;
@@ -525,6 +527,7 @@ export default function Home() {
         </main>
       </div>
     </div>
+    </LoadingOverlay>
   );
 }
 function Feature({
