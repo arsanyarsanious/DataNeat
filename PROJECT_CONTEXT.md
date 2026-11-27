@@ -608,3 +608,7 @@ Validation: 678 backend tests passed on the integrated changes; 45 focused tests
   246px / 76px / mobile horizontal shell; reduced-motion supported.
 - Verified with TypeScript, static build, and Playwright dark/light/mobile
   screenshots; no hydration errors. See `docs/loading-skeleton.md`.
+- Deployed the skeleton static export to PythonAnywhere on 2026-11-27 (66 files;
+  five Next RSC payloads initially failed with network errors, were retried, and
+  now return 200). Live dark/light skeleton computed styles and the absence of
+  the old “Opening your workspace…” copy were verified.

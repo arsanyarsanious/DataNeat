@@ -330,6 +330,7 @@ Backend suite: **61 passed**, including full-column add/remove/no-change behavio
 - Verified tokens with Playwright computed styles: dark canvas `rgb(11,15,25)`, light `rgb(248,250,252)`, surfaces/borders/base/highlight exact, active nav tint and 3px `#10B981`/`#059669` rail, status 13px, 11 rows/6 columns, 1.5s shimmer.
 - Captured dark/light 1440×900 and dark 390×844 screenshots; mobile grid now shows three columns without clipping. Fade-out measured mid-transition; loaded workspace/files/share pages rendered with no hydration errors.
 - `tsc --noEmit` passed; `CLOUDFLARE_EXPORT=1 pnpm run build` passed (10 static pages). Details: `docs/loading-skeleton.md`.
+- Deployed 66 static files to PythonAnywhere; five Next client-navigation payloads (`_not-found.txt`, `files.txt`, `files/__next._full.txt`, `guide/__next._full.txt`, `guide/__next._tree.txt`) initially failed with network errors, were retried, and all return 200. Live workspace HTML matches the local build, the new JS contains the skeleton copy, live dark/light computed styles are correct, and the old “Opening your workspace…” copy is absent.
 
 ## November 25, 2026 — Companion token and same-origin CORS
 
